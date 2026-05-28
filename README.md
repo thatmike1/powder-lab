@@ -2,6 +2,8 @@
 
 A falling-sand sandbox in the browser — paint ~14 materials and watch them flow, burn, dissolve, and react. Built with React + TypeScript + Vite, with the entire 60fps simulation running on a plain canvas *outside* React's render cycle.
 
+### ▶ [Play it live](https://thatmike1.github.io/powder-lab/)
+
 ![Powder Lab — basin scene](.preview/scene-1.png)
 
 ## Features
