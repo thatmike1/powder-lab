@@ -74,8 +74,10 @@ boilPoint[Mat.WATER] = 100
 // update() switch). default 0 means "no transition" for that material.
 export const freezePoint = new Float32Array(MAT_COUNT)
 freezePoint[Mat.WATER] = 0 // -> ICE
-freezePoint[Mat.LAVA] = 500 // -> STONE (emit 700 keeps it liquid while hot)
-freezePoint[Mat.STEAM] = 60 // -> WATER (condense)
+freezePoint[Mat.LAVA] = 600 // -> STONE, but only when touching a coolant (see
+// updateLava): high enough that a single water/steam neighbor trips it, while
+// the coolant gate keeps airborne lava molten regardless of temperature.
+freezePoint[Mat.STEAM] = 40 // -> WATER (condense) only once well-cooled aloft
 
 // A "movable" cell can be displaced by density swaps (liquids + gases + fire).
 // Powders are intentionally NOT movable-by-others, so water rests on sand etc.

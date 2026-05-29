@@ -475,13 +475,19 @@ export class Simulation {
     this.updateLiquid(x, y, m)
   }
 
-  /** Steam: condenses back to water once it cools below its freeze point. */
+  /**
+   * Steam: rarely condenses back to water once cooled, otherwise rises & fades.
+   * Condensation is intentionally a low-probability event: making it certain
+   * turns a plume into a closed boil->rise->condense->rain->boil convection loop
+   * (the "breathing cloud"). At ~2%/frame most steam dissipates via its lifespan
+   * instead, so only a little water drizzles back and the loop never sustains.
+   */
   private updateSteam(x: number, y: number, i: number): void {
-    if (this.heat[i] <= freezePoint[Mat.STEAM]) {
-      this.setCell(x, y, Mat.WATER) // condense — closes the water cycle
+    if (this.heat[i] <= freezePoint[Mat.STEAM] && Math.random() < 0.02) {
+      this.setCell(x, y, Mat.WATER) // condense — occasional water-cycle close
       return
     }
-    this.updateGas(x, y, i) // also fades by lifespan in updateGas
+    this.updateGas(x, y, i) // rises and fades by lifespan in updateGas
   }
 
   private updateFire(x: number, y: number, i: number): void {
@@ -517,14 +523,32 @@ export class Simulation {
     }
   }
 
+  /** active coolants (cold/wet matter) that can quench lava into a crust. */
+  private isCoolant(m: number): boolean {
+    return m === Mat.WATER || m === Mat.STEAM || m === Mat.ICE
+  }
+  /** true if any 4-neighbor is an active coolant. */
+  private nearCoolant(x: number, y: number): boolean {
+    return (
+      this.isCoolant(this.matAt(x, y - 1)) ||
+      this.isCoolant(this.matAt(x, y + 1)) ||
+      this.isCoolant(this.matAt(x - 1, y)) ||
+      this.isCoolant(this.matAt(x + 1, y))
+    )
+  }
+
   private updateLava(x: number, y: number): void {
     const i = y * this.W + x
-    // Lava cooling -> stone crust. CHECKED BEFORE re-emission, against the value
-    // last frame's diffusion left behind: re-asserting first would pin heat to
-    // emitTemp and the test could never fire. A cell quenched by water/ambient
-    // below freezePoint solidifies; pool interiors (hot neighbors) lose little
-    // per frame and stay molten. Moving lava is kept hot via moveLava's carry.
-    if (this.heat[i] <= freezePoint[Mat.LAVA]) {
+    // Lava solidifies into a stone crust only where it is BOTH cold enough AND
+    // touching a coolant (water/steam/ice). the coolant gate is the key to not
+    // crusting in open air: pure temperature would also freeze lava surrounded
+    // by air, because air is a colder sink than water, so a thin stream petrifies
+    // mid-fall. requiring real coolant contact keeps airborne lava molten while
+    // still forming a crust where it meets water. CHECKED BEFORE re-emission so
+    // it tests the value last frame's diffusion left behind (re-asserting first
+    // would pin heat to emitTemp and the test could never fire).
+    // (a per-material heat conductivity would model this more cleanly — bd.)
+    if (this.heat[i] <= freezePoint[Mat.LAVA] && this.nearCoolant(x, y)) {
       this.setCell(x, y, Mat.STONE)
       return
     }
