@@ -7,8 +7,17 @@ const H = 150
 const SCALE = 4
 
 export default function App() {
-  const { canvasRef, ui, setMaterial, setBrush, setSpeed, toggleRunning, toggleGlow, stepOnce, clear } =
-    useSimulation(W, H, SCALE)
+  const {
+    canvasRef,
+    ui,
+    setMaterial,
+    setBrush,
+    setSpeed,
+    toggleRunning,
+    toggleGlow,
+    stepOnce,
+    clear,
+  } = useSimulation(W, H, SCALE)
 
   return (
     <div className="app">
@@ -49,16 +58,13 @@ export default function App() {
         </aside>
 
         <main className="stage">
-          <canvas
-            ref={canvasRef}
-            width={W * SCALE}
-            height={H * SCALE}
-            className="sim"
-          />
+          <canvas ref={canvasRef} width={W * SCALE} height={H * SCALE} className="sim" />
           <div className="hud">
             <span>{ui.fps} fps</span>
             <span>{ui.count.toLocaleString()} particles</span>
-            <span className="hint">drag to draw · right-click to erase · space = pause · C = clear</span>
+            <span className="hint">
+              drag to draw · right-click to erase · space = pause · C = clear
+            </span>
           </div>
         </main>
       </div>

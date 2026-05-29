@@ -31,7 +31,13 @@ export function useSimulation(W: number, H: number, scale: number) {
   const pointer = useRef({ down: false, erase: false, x: 0, y: 0 })
 
   const [ui, setUi] = useState<SimUiState>({
-    running: true, material: Mat.SAND, brush: 4, glow: true, speed: 1, fps: 0, count: 0,
+    running: true,
+    material: Mat.SAND,
+    brush: 4,
+    glow: true,
+    speed: 1,
+    fps: 0,
+    count: 0,
   })
 
   useEffect(() => {
@@ -55,7 +61,9 @@ export function useSimulation(W: number, H: number, scale: number) {
 
     const onDown = (e: PointerEvent) => {
       e.preventDefault()
-      try { canvas.setPointerCapture(e.pointerId) } catch {}
+      try {
+        canvas.setPointerCapture(e.pointerId)
+      } catch {}
       const { gx, gy } = toGrid(e.clientX, e.clientY)
       pointer.current.down = true
       pointer.current.erase = e.button === 2 // right-click erases
@@ -67,7 +75,8 @@ export function useSimulation(W: number, H: number, scale: number) {
       if (!pointer.current.down) return
       const { gx, gy } = toGrid(e.clientX, e.clientY)
       // Interpolate so fast strokes don't leave gaps.
-      const px = pointer.current.x, py = pointer.current.y
+      const px = pointer.current.x,
+        py = pointer.current.y
       const steps = Math.max(Math.abs(gx - px), Math.abs(gy - py))
       for (let s = 1; s <= steps; s++) {
         paintAt(Math.round(px + ((gx - px) * s) / steps), Math.round(py + ((gy - py) * s) / steps))
@@ -78,7 +87,9 @@ export function useSimulation(W: number, H: number, scale: number) {
     }
     const onUp = (e: PointerEvent) => {
       pointer.current.down = false
-      try { canvas.releasePointerCapture(e.pointerId) } catch {}
+      try {
+        canvas.releasePointerCapture(e.pointerId)
+      } catch {}
     }
     const onCtx = (e: Event) => e.preventDefault()
 
@@ -146,11 +157,27 @@ export function useSimulation(W: number, H: number, scale: number) {
     const onKey = (e: KeyboardEvent) => {
       if (e.target instanceof HTMLInputElement) return
       const k = e.key.toLowerCase()
-      if (k === ' ') { e.preventDefault(); toggleRunning(); return }
-      if (k === 'c') { clear(); return }
-      if (k === 'g') { toggleGlow(); return }
-      if (k === '[') { setBrush(Math.max(1, cfg.current.brush - 1)); return }
-      if (k === ']') { setBrush(Math.min(40, cfg.current.brush + 1)); return }
+      if (k === ' ') {
+        e.preventDefault()
+        toggleRunning()
+        return
+      }
+      if (k === 'c') {
+        clear()
+        return
+      }
+      if (k === 'g') {
+        toggleGlow()
+        return
+      }
+      if (k === '[') {
+        setBrush(Math.max(1, cfg.current.brush - 1))
+        return
+      }
+      if (k === ']') {
+        setBrush(Math.min(40, cfg.current.brush + 1))
+        return
+      }
       const hit = PALETTE.find((p) => p.key?.toLowerCase() === k)
       if (hit) setMaterial(hit.id)
     }
@@ -158,5 +185,15 @@ export function useSimulation(W: number, H: number, scale: number) {
     return () => window.removeEventListener('keydown', onKey)
   }, [toggleRunning, clear, toggleGlow, setBrush, setMaterial])
 
-  return { canvasRef, ui, setMaterial, setBrush, setSpeed, toggleRunning, toggleGlow, stepOnce, clear }
+  return {
+    canvasRef,
+    ui,
+    setMaterial,
+    setBrush,
+    setSpeed,
+    toggleRunning,
+    toggleGlow,
+    stepOnce,
+    clear,
+  }
 }

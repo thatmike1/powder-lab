@@ -3,7 +3,9 @@ import { Mat, density, isMovable, isDissolvable } from './materials'
 const CS = 16 // chunk size (cells per side)
 
 // Background color (matches the canvas frame in CSS).
-const BG_R = 16, BG_G = 18, BG_B = 22
+const BG_R = 16,
+  BG_G = 18,
+  BG_B = 22
 const A = 0xff000000
 
 function rgba(r: number, g: number, b: number): number {
@@ -14,7 +16,7 @@ function clamp(v: number): number {
   return v < 0 ? 0 : v > 255 ? 255 : v
 }
 function shade(r: number, g: number, b: number, v: number): number {
-  return rgba(clamp(r + v), clamp(g + v), clamp(b + v), )
+  return rgba(clamp(r + v), clamp(g + v), clamp(b + v))
 }
 // Blend a color toward the background by factor t (1 = full color, 0 = bg).
 function blendBg(r: number, g: number, b: number, t: number): number {
@@ -128,9 +130,15 @@ export class Simulation {
   private swap(x1: number, y1: number, x2: number, y2: number): void {
     const i1 = y1 * this.W + x1
     const i2 = y2 * this.W + x2
-    const c = this.cells[i1]; this.cells[i1] = this.cells[i2]; this.cells[i2] = c
-    const l = this.life[i1]; this.life[i1] = this.life[i2]; this.life[i2] = l
-    const e = this.extra[i1]; this.extra[i1] = this.extra[i2]; this.extra[i2] = e
+    const c = this.cells[i1]
+    this.cells[i1] = this.cells[i2]
+    this.cells[i2] = c
+    const l = this.life[i1]
+    this.life[i1] = this.life[i2]
+    this.life[i2] = l
+    const e = this.extra[i1]
+    this.extra[i1] = this.extra[i2]
+    this.extra[i2] = e
     this.stamp[i1] = this.frame
     this.stamp[i2] = this.frame
     this.wake(x1, y1)
@@ -145,7 +153,8 @@ export class Simulation {
     for (let dy = -r; dy <= r; dy++) {
       for (let dx = -r; dx <= r; dx++) {
         if (dx * dx + dy * dy > r2) continue
-        const x = cx + dx, y = cy + dy
+        const x = cx + dx,
+          y = cy + dy
         if (x < 0 || y < 0 || x >= this.W || y >= this.H) continue
         // Don't overwrite indestructible walls unless we're erasing.
         if (mat !== Mat.EMPTY && this.cells[y * this.W + x] === Mat.WALL) continue
@@ -178,8 +187,10 @@ export class Simulation {
     for (let cy = chunkH - 1; cy >= 0; cy--) {
       for (let cx = 0; cx < chunkW; cx++) {
         if (!this.active[cy * chunkW + cx]) continue
-        const x0 = cx * CS, x1 = Math.min(x0 + CS, W)
-        const y0 = cy * CS, y1 = Math.min(y0 + CS, H)
+        const x0 = cx * CS,
+          x1 = Math.min(x0 + CS, W)
+        const y0 = cy * CS,
+          y1 = Math.min(y0 + CS, H)
         for (let y = y1 - 1; y >= y0; y--) {
           if (dir > 0) for (let x = x0; x < x1; x++) this.update(x, y)
           else for (let x = x1 - 1; x >= x0; x--) this.update(x, y)
@@ -200,33 +211,53 @@ export class Simulation {
       case Mat.STONE:
         return
       case Mat.SAND:
-        this.updatePowder(x, y, m); return
+        this.updatePowder(x, y, m)
+        return
       case Mat.GUNPOWDER:
-        if (this.touchesHot(x, y)) { this.explode(x, y); return }
-        this.updatePowder(x, y, m); return
+        if (this.touchesHot(x, y)) {
+          this.explode(x, y)
+          return
+        }
+        this.updatePowder(x, y, m)
+        return
       case Mat.WATER:
-        this.updateLiquid(x, y, m); return
+        this.updateLiquid(x, y, m)
+        return
       case Mat.OIL:
-        if (this.touchesHot(x, y) && Math.random() < 0.3) { this.setCell(x, y, Mat.FIRE); return }
-        this.updateLiquid(x, y, m); return
+        if (this.touchesHot(x, y) && Math.random() < 0.3) {
+          this.setCell(x, y, Mat.FIRE)
+          return
+        }
+        this.updateLiquid(x, y, m)
+        return
       case Mat.ACID:
-        this.updateAcid(x, y); return
+        this.updateAcid(x, y)
+        return
       case Mat.LAVA:
-        this.updateLava(x, y); return
+        this.updateLava(x, y)
+        return
       case Mat.FIRE:
-        this.updateFire(x, y, i); return
+        this.updateFire(x, y, i)
+        return
       case Mat.SMOKE:
-        this.updateGas(x, y, i); return
+        this.updateGas(x, y, i)
+        return
       case Mat.STEAM:
-        this.updateGas(x, y, i); return
+        this.updateGas(x, y, i)
+        return
       case Mat.WOOD:
         if (this.touchesHot(x, y) && Math.random() < 0.05) this.setCell(x, y, Mat.FIRE)
         return
       case Mat.PLANT:
-        if (this.touchesHot(x, y) && Math.random() < 0.12) { this.setCell(x, y, Mat.FIRE); return }
-        this.growPlant(x, y); return
+        if (this.touchesHot(x, y) && Math.random() < 0.12) {
+          this.setCell(x, y, Mat.FIRE)
+          return
+        }
+        this.growPlant(x, y)
+        return
       case Mat.ICE:
-        this.updateIce(x, y); return
+        this.updateIce(x, y)
+        return
     }
   }
 
@@ -236,8 +267,14 @@ export class Simulation {
   private tryMove(x: number, y: number, tx: number, ty: number, m: number): boolean {
     if (tx < 0 || ty < 0 || tx >= this.W || ty >= this.H) return false
     const tm = this.cells[ty * this.W + tx]
-    if (tm === Mat.EMPTY) { this.swap(x, y, tx, ty); return true }
-    if (isMovable(tm) && density[m] > density[tm]) { this.swap(x, y, tx, ty); return true }
+    if (tm === Mat.EMPTY) {
+      this.swap(x, y, tx, ty)
+      return true
+    }
+    if (isMovable(tm) && density[m] > density[tm]) {
+      this.swap(x, y, tx, ty)
+      return true
+    }
     return false
   }
 
@@ -245,8 +282,14 @@ export class Simulation {
   private tryRise(x: number, y: number, tx: number, ty: number, m: number): boolean {
     if (tx < 0 || ty < 0 || tx >= this.W || ty >= this.H) return false
     const tm = this.cells[ty * this.W + tx]
-    if (tm === Mat.EMPTY) { this.swap(x, y, tx, ty); return true }
-    if (isMovable(tm) && density[tm] > density[m]) { this.swap(x, y, tx, ty); return true }
+    if (tm === Mat.EMPTY) {
+      this.swap(x, y, tx, ty)
+      return true
+    }
+    if (isMovable(tm) && density[tm] > density[m]) {
+      this.swap(x, y, tx, ty)
+      return true
+    }
     return false
   }
 
@@ -268,7 +311,10 @@ export class Simulation {
   }
 
   private updateGas(x: number, y: number, i: number): void {
-    if (this.life[i] <= 0) { this.setCell(x, y, Mat.EMPTY); return }
+    if (this.life[i] <= 0) {
+      this.setCell(x, y, Mat.EMPTY)
+      return
+    }
     this.life[i]--
     this.wake(x, y) // stay awake while alive (so it keeps fading even if stuck)
     const m = this.cells[i]
@@ -296,15 +342,24 @@ export class Simulation {
 
   /** Fire/lava ignite flammable neighbors; gunpowder detonates. */
   private ignite(x: number, y: number): void {
-    const dirs = [[0, -1], [0, 1], [-1, 0], [1, 0]]
+    const dirs = [
+      [0, -1],
+      [0, 1],
+      [-1, 0],
+      [1, 0],
+    ]
     for (const [dx, dy] of dirs) {
-      const nx = x + dx, ny = y + dy
+      const nx = x + dx,
+        ny = y + dy
       if (nx < 0 || ny < 0 || nx >= this.W || ny >= this.H) continue
       const nm = this.cells[ny * this.W + nx]
-      if (nm === Mat.WOOD) { if (Math.random() < 0.05) this.setCell(nx, ny, Mat.FIRE) }
-      else if (nm === Mat.OIL) { if (Math.random() < 0.25) this.setCell(nx, ny, Mat.FIRE) }
-      else if (nm === Mat.PLANT) { if (Math.random() < 0.12) this.setCell(nx, ny, Mat.FIRE) }
-      else if (nm === Mat.GUNPOWDER) this.explode(nx, ny)
+      if (nm === Mat.WOOD) {
+        if (Math.random() < 0.05) this.setCell(nx, ny, Mat.FIRE)
+      } else if (nm === Mat.OIL) {
+        if (Math.random() < 0.25) this.setCell(nx, ny, Mat.FIRE)
+      } else if (nm === Mat.PLANT) {
+        if (Math.random() < 0.12) this.setCell(nx, ny, Mat.FIRE)
+      } else if (nm === Mat.GUNPOWDER) this.explode(nx, ny)
     }
   }
 
@@ -319,16 +374,25 @@ export class Simulation {
 
     // Douse: water neighbors sizzle into steam and snuff the flame.
     let doused = false
-    const dirs = [[0, -1], [0, 1], [-1, 0], [1, 0]]
+    const dirs = [
+      [0, -1],
+      [0, 1],
+      [-1, 0],
+      [1, 0],
+    ]
     for (const [dx, dy] of dirs) {
-      const nx = x + dx, ny = y + dy
+      const nx = x + dx,
+        ny = y + dy
       if (nx < 0 || ny < 0 || nx >= this.W || ny >= this.H) continue
       if (this.cells[ny * this.W + nx] === Mat.WATER) {
         if (Math.random() < 0.3) this.setCell(nx, ny, Mat.STEAM)
         doused = true
       }
     }
-    if (doused && Math.random() < 0.5) { this.setCell(x, y, Mat.SMOKE); return }
+    if (doused && Math.random() < 0.5) {
+      this.setCell(x, y, Mat.SMOKE)
+      return
+    }
 
     this.ignite(x, y)
 
@@ -342,9 +406,15 @@ export class Simulation {
 
   private updateLava(x: number, y: number): void {
     // Lava + water -> stone (+ steam where the water was).
-    const dirs = [[0, -1], [0, 1], [-1, 0], [1, 0]]
+    const dirs = [
+      [0, -1],
+      [0, 1],
+      [-1, 0],
+      [1, 0],
+    ]
     for (const [dx, dy] of dirs) {
-      const nx = x + dx, ny = y + dy
+      const nx = x + dx,
+        ny = y + dy
       if (nx < 0 || ny < 0 || nx >= this.W || ny >= this.H) continue
       if (this.cells[ny * this.W + nx] === Mat.WATER) {
         this.setCell(nx, ny, Mat.STEAM)
@@ -369,13 +439,22 @@ export class Simulation {
   }
 
   private updateAcid(x: number, y: number): void {
-    const dirs = [[0, 1], [-1, 0], [1, 0], [0, -1]]
+    const dirs = [
+      [0, 1],
+      [-1, 0],
+      [1, 0],
+      [0, -1],
+    ]
     for (const [dx, dy] of dirs) {
-      const nx = x + dx, ny = y + dy
+      const nx = x + dx,
+        ny = y + dy
       if (nx < 0 || ny < 0 || nx >= this.W || ny >= this.H) continue
       if (isDissolvable(this.cells[ny * this.W + nx]) && Math.random() < 0.25) {
         this.setCell(nx, ny, Mat.EMPTY)
-        if (Math.random() < 0.4) { this.setCell(x, y, Mat.SMOKE); return } // acid spent
+        if (Math.random() < 0.4) {
+          this.setCell(x, y, Mat.SMOKE)
+          return
+        } // acid spent
         break
       }
     }
@@ -384,23 +463,44 @@ export class Simulation {
 
   private growPlant(x: number, y: number): void {
     if (Math.random() > 0.012) return
-    const dirs = [[0, -1], [0, 1], [-1, 0], [1, 0]]
+    const dirs = [
+      [0, -1],
+      [0, 1],
+      [-1, 0],
+      [1, 0],
+    ]
     for (const [dx, dy] of dirs) {
-      const nx = x + dx, ny = y + dy
+      const nx = x + dx,
+        ny = y + dy
       if (nx < 0 || ny < 0 || nx >= this.W || ny >= this.H) continue
-      if (this.cells[ny * this.W + nx] === Mat.WATER) { this.setCell(nx, ny, Mat.PLANT); return }
+      if (this.cells[ny * this.W + nx] === Mat.WATER) {
+        this.setCell(nx, ny, Mat.PLANT)
+        return
+      }
     }
   }
 
   private updateIce(x: number, y: number): void {
-    if (this.touchesHot(x, y) && Math.random() < 0.1) { this.setCell(x, y, Mat.WATER); return }
+    if (this.touchesHot(x, y) && Math.random() < 0.1) {
+      this.setCell(x, y, Mat.WATER)
+      return
+    }
     // Occasionally freeze adjacent water.
     if (Math.random() < 0.004) {
-      const dirs = [[0, -1], [0, 1], [-1, 0], [1, 0]]
+      const dirs = [
+        [0, -1],
+        [0, 1],
+        [-1, 0],
+        [1, 0],
+      ]
       for (const [dx, dy] of dirs) {
-        const nx = x + dx, ny = y + dy
+        const nx = x + dx,
+          ny = y + dy
         if (nx < 0 || ny < 0 || nx >= this.W || ny >= this.H) continue
-        if (this.cells[ny * this.W + nx] === Mat.WATER) { this.setCell(nx, ny, Mat.ICE); return }
+        if (this.cells[ny * this.W + nx] === Mat.WATER) {
+          this.setCell(nx, ny, Mat.ICE)
+          return
+        }
       }
     }
   }
@@ -411,7 +511,8 @@ export class Simulation {
     for (let dy = -R; dy <= R; dy++) {
       for (let dx = -R; dx <= R; dx++) {
         if (dx * dx + dy * dy > R2) continue
-        const nx = x + dx, ny = y + dy
+        const nx = x + dx,
+          ny = y + dy
         if (nx < 0 || ny < 0 || nx >= this.W || ny >= this.H) continue
         if (this.cells[ny * this.W + nx] === Mat.WALL) continue // walls survive
         this.setCell(nx, ny, Math.random() < 0.7 ? Mat.FIRE : Mat.EMPTY)
@@ -423,20 +524,30 @@ export class Simulation {
 
   private colorOf(m: number, lf: number, ex: number): number {
     switch (m) {
-      case Mat.WALL: return shade(120, 122, 130, (ex % 16) - 8)
-      case Mat.SAND: return shade(196, 180, 120, (ex % 40) - 14)
-      case Mat.WATER: return shade(48, 104, 200, (ex % 18) - 8)
-      case Mat.STONE: return shade(94, 94, 102, (ex % 28) - 14)
-      case Mat.WOOD: return shade(112, 74, 42, (ex % 32) - 14)
-      case Mat.OIL: return shade(60, 52, 38, (ex % 16) - 8)
-      case Mat.ACID: return shade(120, 214, 70, (ex % 34) - 14)
-      case Mat.PLANT: return shade(46, 156, 58, (ex % 54) - 22)
-      case Mat.ICE: return shade(168, 208, 234, (ex % 20) - 10)
-      case Mat.GUNPOWDER: return shade(64, 62, 70, (ex % 28) - 14)
+      case Mat.WALL:
+        return shade(120, 122, 130, (ex % 16) - 8)
+      case Mat.SAND:
+        return shade(196, 180, 120, (ex % 40) - 14)
+      case Mat.WATER:
+        return shade(48, 104, 200, (ex % 18) - 8)
+      case Mat.STONE:
+        return shade(94, 94, 102, (ex % 28) - 14)
+      case Mat.WOOD:
+        return shade(112, 74, 42, (ex % 32) - 14)
+      case Mat.OIL:
+        return shade(60, 52, 38, (ex % 16) - 8)
+      case Mat.ACID:
+        return shade(120, 214, 70, (ex % 34) - 14)
+      case Mat.PLANT:
+        return shade(46, 156, 58, (ex % 54) - 22)
+      case Mat.ICE:
+        return shade(168, 208, 234, (ex % 20) - 10)
+      case Mat.GUNPOWDER:
+        return shade(64, 62, 70, (ex % 28) - 14)
       case Mat.FIRE: {
         const t = lf > 120 ? 1 : lf / 120
         const f = ((ex + this.frame * 3) % 36) - 16 // animated flicker
-        return rgba(clamp(255 + (f >> 1)), clamp(70 + (160 * t | 0) + f), clamp((40 * t * t) | 0))
+        return rgba(clamp(255 + (f >> 1)), clamp(70 + ((160 * t) | 0) + f), clamp((40 * t * t) | 0))
       }
       case Mat.LAVA: {
         const f = ((ex + this.frame * 2) % 44) - 18
@@ -461,7 +572,11 @@ export class Simulation {
     let count = 0
     for (let i = 0; i < n; i++) {
       const m = cells[i]
-      if (m === Mat.EMPTY) { buf32[i] = BG; glow32[i] = 0; continue }
+      if (m === Mat.EMPTY) {
+        buf32[i] = BG
+        glow32[i] = 0
+        continue
+      }
       count++
       const c = this.colorOf(m, life[i], extra[i])
       buf32[i] = c

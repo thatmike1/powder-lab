@@ -38,14 +38,16 @@ density[Mat.STEAM] = 1
 // A "movable" cell can be displaced by density swaps (liquids + gases + fire).
 // Powders are intentionally NOT movable-by-others, so water rests on sand etc.
 const movable = new Uint8Array(MAT_COUNT)
-for (const m of [Mat.WATER, Mat.OIL, Mat.ACID, Mat.LAVA, Mat.SMOKE, Mat.STEAM, Mat.FIRE]) movable[m] = 1
+for (const m of [Mat.WATER, Mat.OIL, Mat.ACID, Mat.LAVA, Mat.SMOKE, Mat.STEAM, Mat.FIRE])
+  movable[m] = 1
 export function isMovable(m: number): boolean {
   return movable[m] === 1
 }
 
 // Acid eats these; everything else (wall, liquids, gases) it ignores.
 const dissolvable = new Uint8Array(MAT_COUNT)
-for (const m of [Mat.SAND, Mat.STONE, Mat.WOOD, Mat.PLANT, Mat.ICE, Mat.GUNPOWDER]) dissolvable[m] = 1
+for (const m of [Mat.SAND, Mat.STONE, Mat.WOOD, Mat.PLANT, Mat.ICE, Mat.GUNPOWDER])
+  dissolvable[m] = 1
 export function isDissolvable(m: number): boolean {
   return dissolvable[m] === 1
 }
