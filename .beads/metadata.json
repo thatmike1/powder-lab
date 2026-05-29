@@ -1,0 +1,7 @@
+{
+  "database": "dolt",
+  "backend": "dolt",
+  "dolt_mode": "embedded",
+  "dolt_database": "powder_lab",
+  "project_id": "4cf578a5-fe5d-48a3-aaef-28547b120d60"
+}
