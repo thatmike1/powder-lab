@@ -1,4 +1,5 @@
 import { density, isDissolvable, isMovable, Mat } from './materials'
+import { encodeRLE } from './scene'
 
 const CS = 16 // chunk size (cells per side)
 
@@ -171,6 +172,33 @@ export class Simulation {
     this.cells.fill(Mat.EMPTY)
     this.life.fill(0)
     this.activeNext.fill(1)
+  }
+
+  /** serialize the current grid (materials only) to a compact byte stream. */
+  snapshot(): Uint8Array<ArrayBuffer> {
+    return encodeRLE(this.cells, this.W, this.H)
+  }
+
+  /**
+   * replace the grid with a previously decoded `cells` array. returns false on
+   * a dimension mismatch (caller should surface a friendly error) and leaves
+   * the grid untouched. on success it re-establishes the sim invariants:
+   * lifespan materials are re-seeded, the color seed is regenerated, no cell is
+   * stamped, and every chunk is woken so the restored scene actually simulates.
+   */
+  restore(cells: Uint8Array): boolean {
+    const n = this.W * this.H
+    if (cells.length !== n) return false
+    this.cells.set(cells)
+    this.life.fill(0)
+    for (let i = 0; i < n; i++) {
+      this.extra[i] = (Math.random() * 256) | 0
+      // fire/smoke/steam need a lifespan or they'd die on the first frame.
+      this.assignSpawnLife(i, this.cells[i])
+    }
+    this.stamp.fill(-1)
+    this.activeNext.fill(1)
+    return true
   }
 
   step(times = 1): void {

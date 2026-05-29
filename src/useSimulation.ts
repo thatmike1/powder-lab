@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { Mat, PALETTE } from './sim/materials'
 import { Simulation } from './sim/Simulation'
+import { decodeRLE, readSceneFromHash, sceneToHash } from './sim/scene'
 
 export interface SimUiState {
   running: boolean
@@ -61,6 +62,21 @@ export function useSimulation(W: number, H: number, scale: number) {
     if (!ctx) return
     const sim = new Simulation(W, H)
     simRef.current = sim
+
+    // hydrate from a shared "#s=..." link, if present. shared scenes start
+    // paused so the viewer sees the exact saved arrangement before pressing play.
+    const fromHash = readSceneFromHash()
+    if (fromHash) {
+      try {
+        const { cells } = decodeRLE(fromHash)
+        if (sim.restore(cells)) {
+          cfg.current.running = false
+          setUi((u) => ({ ...u, running: false }))
+        }
+      } catch {
+        // malformed hash — just boot an empty board.
+      }
+    }
 
     const toGrid = (clientX: number, clientY: number) => {
       const rect = canvas.getBoundingClientRect()
@@ -176,6 +192,53 @@ export function useSimulation(W: number, H: number, scale: number) {
   const stepOnce = useCallback(() => simRef.current?.step(1), [])
   const clear = useCallback(() => simRef.current?.clear(), [])
 
+  // serialize the grid into the URL hash and copy a shareable link. falls back
+  // to leaving the hash in the address bar when the clipboard is unavailable.
+  const shareScene = useCallback(async () => {
+    const sim = simRef.current
+    if (!sim) return
+    const hash = sceneToHash(sim.snapshot())
+    history.replaceState(null, '', hash)
+    const url = location.origin + location.pathname + location.search + hash
+    try {
+      await navigator.clipboard.writeText(url)
+    } catch {
+      // no clipboard (non-secure context / denied) — the address bar now holds
+      // the shareable URL for the user to copy manually.
+    }
+  }, [])
+
+  // download the current scene as a raw-bytes .powder file.
+  const saveScene = useCallback(() => {
+    const sim = simRef.current
+    if (!sim) return
+    const blob = new Blob([sim.snapshot()], { type: 'application/octet-stream' })
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = 'scene.powder'
+    a.click()
+    URL.revokeObjectURL(url)
+  }, [])
+
+  // load a .powder file, replacing the current grid (and pausing on success).
+  const loadScene = useCallback(async (file: File) => {
+    const sim = simRef.current
+    if (!sim) return
+    try {
+      const bytes = new Uint8Array(await file.arrayBuffer())
+      const { W: sw, H: sh, cells } = decodeRLE(bytes)
+      if (!sim.restore(cells)) {
+        alert(`That scene is ${sw}×${sh}, but this board is ${sim.W}×${sim.H}.`)
+        return
+      }
+      cfg.current.running = false
+      setUi((u) => ({ ...u, running: false }))
+    } catch {
+      alert("Couldn't read that file — it doesn't look like a Powder Lab scene.")
+    }
+  }, [])
+
   // Keyboard shortcuts.
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -225,5 +288,8 @@ export function useSimulation(W: number, H: number, scale: number) {
     setDarkness,
     stepOnce,
     clear,
+    shareScene,
+    saveScene,
+    loadScene,
   }
 }

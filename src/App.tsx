@@ -1,3 +1,4 @@
+import { useRef } from 'react'
 import { CATEGORIES, PALETTE } from './sim/materials'
 import { useSimulation } from './useSimulation'
 
@@ -19,7 +20,12 @@ export default function App() {
     setDarkness,
     stepOnce,
     clear,
+    shareScene,
+    saveScene,
+    loadScene,
   } = useSimulation(W, H, SCALE)
+
+  const fileRef = useRef<HTMLInputElement | null>(null)
 
   return (
     <div className="app">
@@ -82,6 +88,27 @@ export default function App() {
         <button type="button" className="ctl" onClick={clear}>
           🗑 Clear
         </button>
+
+        <button type="button" className="ctl" onClick={shareScene}>
+          📤 Share
+        </button>
+        <button type="button" className="ctl" onClick={saveScene}>
+          💾 Save
+        </button>
+        <button type="button" className="ctl" onClick={() => fileRef.current?.click()}>
+          📂 Load
+        </button>
+        <input
+          ref={fileRef}
+          type="file"
+          accept=".powder"
+          hidden
+          onChange={(e) => {
+            const file = e.target.files?.[0]
+            if (file) loadScene(file)
+            e.target.value = '' // allow re-loading the same file
+          }}
+        />
 
         <label className="slider">
           Brush
