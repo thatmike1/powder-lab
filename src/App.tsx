@@ -17,6 +17,7 @@ export default function App() {
     toggleRunning,
     toggleGlow,
     toggleLight,
+    toggleTemp,
     setDarkness,
     stepOnce,
     clear,
@@ -73,6 +74,7 @@ export default function App() {
             <span>{ui.count.toLocaleString()} particles</span>
             <span className="hint">
               drag to draw · right-click to erase · space = pause · C = clear · G = glow · L = light
+              · H = heatmap
             </span>
           </div>
         </main>
@@ -144,6 +146,14 @@ export default function App() {
           onClick={toggleLight}
         >
           💡 Light {ui.light ? 'on' : 'off'}
+        </button>
+
+        <button
+          type="button"
+          className={`ctl toggle${ui.showTemp ? ' on' : ''}`}
+          onClick={toggleTemp}
+        >
+          🌡 Temp {ui.showTemp ? 'on' : 'off'}
         </button>
 
         <label className="slider">

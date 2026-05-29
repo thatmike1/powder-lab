@@ -1,7 +1,24 @@
-import { density, isDissolvable, isMovable, Mat } from './materials'
+import {
+  boilPoint,
+  density,
+  emitTemp,
+  freezePoint,
+  ignitionPoint,
+  isDissolvable,
+  isMovable,
+  Mat,
+  meltPoint,
+} from './materials'
 import { encodeRLE } from './scene'
 
 const CS = 16 // chunk size (cells per side)
+
+// ---- heat field tuning ---------------------------------------------------
+const AMBIENT = 20 // resting temperature everything relaxes toward
+const DIFFUSE = 0.2 // fraction of the neighbor gradient that flows per frame
+// (stable for the 4-neighbor stencil: 4*DIFFUSE < 1). higher = heat reaches a
+// neighbor in a single frame, so a brief flame contact can still ignite wood.
+const EPS = 0.5 // heat delta below which a cell is "settled" and stops waking
 
 // Background color (matches the canvas frame in CSS).
 const BG_R = 16,
@@ -39,10 +56,13 @@ export class Simulation {
   life: Uint8Array // generic per-cell counter (fire/smoke/steam lifespan)
   extra: Uint8Array // per-cell random seed for color dithering / flicker
   stamp: Int32Array // last frame a cell was touched (prevents double-moves)
+  heat: Float32Array // temperature per cell; diffuses each frame (Eulerian)
+  private heatNext: Float32Array // double buffer for Jacobi-style diffusion
 
   frame = 0
   count = 0
   emissive = 0 // fire/lava cell count this frame; lets render() skip glow passes
+  private showTemp = false // debug heatmap: render heat as a blue->red ramp
 
   // Dirty-chunk scheduler: only chunks flagged active get simulated.
   readonly chunkW: number
@@ -71,6 +91,8 @@ export class Simulation {
     this.life = new Uint8Array(n)
     this.extra = new Uint8Array(n)
     this.stamp = new Int32Array(n).fill(-1)
+    this.heat = new Float32Array(n).fill(AMBIENT)
+    this.heatNext = new Float32Array(n)
     for (let i = 0; i < n; i++) this.extra[i] = (Math.random() * 256) | 0
 
     this.chunkW = Math.ceil(W / CS)
@@ -131,17 +153,28 @@ export class Simulation {
     else this.life[i] = 0
   }
 
+  /** Seed a freshly-set source cell (fire/lava/ice) at its emission temperature. */
+  private assignSpawnHeat(i: number, mat: number): void {
+    if (emitTemp[mat]) this.heat[i] = emitTemp[mat]
+  }
+
   /** Set a cell to a material, refreshing its random seed + lifespan, and wake it. */
   private setCell(x: number, y: number, mat: number): void {
     const i = y * this.W + x
     this.cells[i] = mat
     this.extra[i] = (Math.random() * 256) | 0
     this.assignSpawnLife(i, mat)
+    this.assignSpawnHeat(i, mat)
     this.stamp[i] = this.frame
     this.wake(x, y)
   }
 
-  /** Swap two cells (material + life + seed) and mark both touched + awake. */
+  /**
+   * Swap two cells (material + life + seed) and mark both touched + awake.
+   * `heat` is deliberately NOT swapped: temperature is a property of *space*
+   * (Eulerian field), not of the particle. A moving source re-asserts its
+   * emission temperature at its new cell next frame, so this self-corrects.
+   */
   private swap(x1: number, y1: number, x2: number, y2: number): void {
     const i1 = y1 * this.W + x1
     const i2 = y2 * this.W + x2
@@ -181,6 +214,7 @@ export class Simulation {
   clear(): void {
     this.cells.fill(Mat.EMPTY)
     this.life.fill(0)
+    this.heat.fill(AMBIENT)
     this.activeNext.fill(1)
   }
 
@@ -201,10 +235,13 @@ export class Simulation {
     if (cells.length !== n) return false
     this.cells.set(cells)
     this.life.fill(0)
+    this.heat.fill(AMBIENT)
     for (let i = 0; i < n; i++) {
       this.extra[i] = (Math.random() * 256) | 0
       // fire/smoke/steam need a lifespan or they'd die on the first frame.
       this.assignSpawnLife(i, this.cells[i])
+      // re-seed source temperatures so fire/lava/ice load at the right heat.
+      this.assignSpawnHeat(i, this.cells[i])
     }
     this.stamp.fill(-1)
     this.activeNext.fill(1)
@@ -213,6 +250,11 @@ export class Simulation {
 
   step(times = 1): void {
     for (let t = 0; t < times; t++) this.stepOnce()
+  }
+
+  /** toggle the debug heatmap overlay (read by colorOf at render time). */
+  setShowTemp(on: boolean): void {
+    this.showTemp = on
   }
 
   private stepOnce(): void {
@@ -239,6 +281,51 @@ export class Simulation {
         }
       }
     }
+
+    // Heat diffuses AFTER the material walk: sources deposit their temperature
+    // for this frame (emission in updateFire/updateLava/ICE), then it spreads.
+    this.diffuse()
+  }
+
+  /**
+   * Jacobi-style heat diffusion over active chunks (read `heat`, write
+   * `heatNext`, then swap). Jacobi (vs in-place) keeps the pass symmetric and
+   * order-independent — unlike the material walk, heat must have no directional
+   * bias. This pass only ever writes `heatNext`, never `cells`, so it moves no
+   * particle and the `stamp` double-move contract is untouched.
+   */
+  private diffuse(): void {
+    const { W, H, chunkW, chunkH, heat, heatNext } = this
+    // full copy so cells in sleeping chunks carry their temperature forward
+    // unchanged across the buffer swap (no stale/zero values when they wake).
+    heatNext.set(heat)
+    for (let cy = 0; cy < chunkH; cy++) {
+      for (let cx = 0; cx < chunkW; cx++) {
+        if (!this.active[cy * chunkW + cx]) continue
+        const x0 = cx * CS,
+          x1 = Math.min(x0 + CS, W)
+        const y0 = cy * CS,
+          y1 = Math.min(y0 + CS, H)
+        for (let y = y0; y < y1; y++) {
+          for (let x = x0; x < x1; x++) {
+            const i = y * W + x
+            const h = heat[i]
+            // out-of-bounds neighbors read as AMBIENT (walls don't conduct in v1)
+            const hUp = y > 0 ? heat[i - W] : AMBIENT
+            const hDown = y < H - 1 ? heat[i + W] : AMBIENT
+            const hLeft = x > 0 ? heat[i - 1] : AMBIENT
+            const hRight = x < W - 1 ? heat[i + 1] : AMBIENT
+            const next = h + DIFFUSE * (hUp + hDown + hLeft + hRight - 4 * h)
+            heatNext[i] = next
+            // re-arm this cell's chunk + neighbors while heat is still moving;
+            // once everything settles within EPS, wakes stop and chunks sleep.
+            if (next - h > EPS || h - next > EPS) this.wake(x, y)
+          }
+        }
+      }
+    }
+    this.heat = heatNext
+    this.heatNext = heat
   }
 
   // ---- per-cell update dispatch -----------------------------------------
@@ -256,17 +343,17 @@ export class Simulation {
         this.updatePowder(x, y, m)
         return
       case Mat.GUNPOWDER:
-        if (this.touchesHot(x, y)) {
+        if (this.heat[i] >= ignitionPoint[Mat.GUNPOWDER]) {
           this.explode(x, y)
           return
         }
         this.updatePowder(x, y, m)
         return
       case Mat.WATER:
-        this.updateLiquid(x, y, m)
+        this.updateWater(x, y, i, m)
         return
       case Mat.OIL:
-        if (this.touchesHot(x, y) && Math.random() < 0.3) {
+        if (this.heat[i] >= ignitionPoint[Mat.OIL] && Math.random() < 0.3) {
           this.setCell(x, y, Mat.FIRE)
           return
         }
@@ -285,13 +372,14 @@ export class Simulation {
         this.updateGas(x, y, i)
         return
       case Mat.STEAM:
-        this.updateGas(x, y, i)
+        this.updateSteam(x, y, i)
         return
       case Mat.WOOD:
-        if (this.touchesHot(x, y) && Math.random() < 0.05) this.setCell(x, y, Mat.FIRE)
+        if (this.heat[i] >= ignitionPoint[Mat.WOOD] && Math.random() < 0.05)
+          this.setCell(x, y, Mat.FIRE)
         return
       case Mat.PLANT:
-        if (this.touchesHot(x, y) && Math.random() < 0.12) {
+        if (this.heat[i] >= ignitionPoint[Mat.PLANT] && Math.random() < 0.12) {
           this.setCell(x, y, Mat.FIRE)
           return
         }
@@ -370,39 +458,30 @@ export class Simulation {
 
   // ---- reactive materials ------------------------------------------------
 
-  private touchesHot(x: number, y: number): boolean {
-    return (
-      this.isHot(this.matAt(x, y - 1)) ||
-      this.isHot(this.matAt(x, y + 1)) ||
-      this.isHot(this.matAt(x - 1, y)) ||
-      this.isHot(this.matAt(x + 1, y))
-    )
-  }
-  private isHot(m: number): boolean {
-    return m === Mat.FIRE || m === Mat.LAVA
+  /**
+   * Water: heat-driven phase changes, then liquid movement. Flammables/sources
+   * ignite emergently via the heat field, so water no longer special-cases its
+   * neighbors — it reacts only to its own cell temperature.
+   */
+  private updateWater(x: number, y: number, i: number, m: number): void {
+    if (this.heat[i] >= boilPoint[Mat.WATER] && Math.random() < 0.4) {
+      this.setCell(x, y, Mat.STEAM) // boil -> steam (carries the hot temp up)
+      return
+    }
+    if (this.heat[i] <= freezePoint[Mat.WATER]) {
+      this.setCell(x, y, Mat.ICE) // cold-driven freeze (ice chills via diffusion)
+      return
+    }
+    this.updateLiquid(x, y, m)
   }
 
-  /** Fire/lava ignite flammable neighbors; gunpowder detonates. */
-  private ignite(x: number, y: number): void {
-    const dirs = [
-      [0, -1],
-      [0, 1],
-      [-1, 0],
-      [1, 0],
-    ]
-    for (const [dx, dy] of dirs) {
-      const nx = x + dx,
-        ny = y + dy
-      if (nx < 0 || ny < 0 || nx >= this.W || ny >= this.H) continue
-      const nm = this.cells[ny * this.W + nx]
-      if (nm === Mat.WOOD) {
-        if (Math.random() < 0.05) this.setCell(nx, ny, Mat.FIRE)
-      } else if (nm === Mat.OIL) {
-        if (Math.random() < 0.25) this.setCell(nx, ny, Mat.FIRE)
-      } else if (nm === Mat.PLANT) {
-        if (Math.random() < 0.12) this.setCell(nx, ny, Mat.FIRE)
-      } else if (nm === Mat.GUNPOWDER) this.explode(nx, ny)
+  /** Steam: condenses back to water once it cools below its freeze point. */
+  private updateSteam(x: number, y: number, i: number): void {
+    if (this.heat[i] <= freezePoint[Mat.STEAM]) {
+      this.setCell(x, y, Mat.WATER) // condense — closes the water cycle
+      return
     }
+    this.updateGas(x, y, i) // also fades by lifespan in updateGas
   }
 
   private updateFire(x: number, y: number, i: number): void {
@@ -412,31 +491,23 @@ export class Simulation {
       return
     }
     this.life[i] -= 1 + ((Math.random() * 2) | 0)
+    // re-assert emission temperature (diffusion bled it away last frame); this
+    // is what ignites/boils/melts neighbors once it spreads into them.
+    if (this.heat[i] < emitTemp[Mat.FIRE]) this.heat[i] = emitTemp[Mat.FIRE]
     this.wake(x, y)
 
-    // Douse: water neighbors sizzle into steam and snuff the flame.
-    let doused = false
-    const dirs = [
-      [0, -1],
-      [0, 1],
-      [-1, 0],
-      [1, 0],
-    ]
-    for (const [dx, dy] of dirs) {
-      const nx = x + dx,
-        ny = y + dy
-      if (nx < 0 || ny < 0 || nx >= this.W || ny >= this.H) continue
-      if (this.cells[ny * this.W + nx] === Mat.WATER) {
-        if (Math.random() < 0.3) this.setCell(nx, ny, Mat.STEAM)
-        doused = true
-      }
-    }
-    if (doused && Math.random() < 0.5) {
+    // Snuff: a flame sitting in heat below its own emission means a cold sink
+    // (water boiling next to it) is winning — puff out to smoke sometimes.
+    if (
+      (this.matAt(x, y - 1) === Mat.WATER ||
+        this.matAt(x, y + 1) === Mat.WATER ||
+        this.matAt(x - 1, y) === Mat.WATER ||
+        this.matAt(x + 1, y) === Mat.WATER) &&
+      Math.random() < 0.25
+    ) {
       this.setCell(x, y, Mat.SMOKE)
       return
     }
-
-    this.ignite(x, y)
 
     // Flames lick upward.
     if (Math.random() < 0.5) {
@@ -447,37 +518,46 @@ export class Simulation {
   }
 
   private updateLava(x: number, y: number): void {
-    // Lava + water -> stone (+ steam where the water was).
-    const dirs = [
-      [0, -1],
-      [0, 1],
-      [-1, 0],
-      [1, 0],
-    ]
-    for (const [dx, dy] of dirs) {
-      const nx = x + dx,
-        ny = y + dy
-      if (nx < 0 || ny < 0 || nx >= this.W || ny >= this.H) continue
-      if (this.cells[ny * this.W + nx] === Mat.WATER) {
-        this.setCell(nx, ny, Mat.STEAM)
-        this.setCell(x, y, Mat.STONE)
-        return
-      }
+    const i = y * this.W + x
+    // Lava cooling -> stone crust. CHECKED BEFORE re-emission, against the value
+    // last frame's diffusion left behind: re-asserting first would pin heat to
+    // emitTemp and the test could never fire. A cell quenched by water/ambient
+    // below freezePoint solidifies; pool interiors (hot neighbors) lose little
+    // per frame and stay molten. Moving lava is kept hot via moveLava's carry.
+    if (this.heat[i] <= freezePoint[Mat.LAVA]) {
+      this.setCell(x, y, Mat.STONE)
+      return
     }
-    this.ignite(x, y)
+    // re-assert emission so the pool stays molten and keeps heating neighbors.
+    if (this.heat[i] < emitTemp[Mat.LAVA]) this.heat[i] = emitTemp[Mat.LAVA]
     this.wake(x, y) // keep lava pools shimmering / reactive
 
     // Viscous: only sometimes flow, and only sluggishly sideways.
     if (Math.random() < 0.6) {
-      if (this.tryMove(x, y, x, y + 1, Mat.LAVA)) return
+      if (this.moveLava(x, y, x, y + 1)) return
       const first = Math.random() < 0.5 ? -1 : 1
-      if (this.tryMove(x, y, x + first, y + 1, Mat.LAVA)) return
-      if (this.tryMove(x, y, x - first, y + 1, Mat.LAVA)) return
+      if (this.moveLava(x, y, x + first, y + 1)) return
+      if (this.moveLava(x, y, x - first, y + 1)) return
       if (Math.random() < 0.3) {
-        if (this.tryMove(x, y, x + first, y, Mat.LAVA)) return
-        if (this.tryMove(x, y, x - first, y, Mat.LAVA)) return
+        if (this.moveLava(x, y, x + first, y)) return
+        if (this.moveLava(x, y, x - first, y)) return
       }
     }
+  }
+
+  /**
+   * Move lava and carry its molten temperature to the destination. Heat is an
+   * Eulerian field (swap leaves it in place), so a cell lava just flowed into
+   * holds the *old* (cold) temperature — without this it would read below
+   * freezePoint next frame and petrify mid-flow. Seeding the destination keeps
+   * a flowing stream liquid; it only crusts once it stops and stays exposed.
+   */
+  private moveLava(x: number, y: number, tx: number, ty: number): boolean {
+    if (!this.tryMove(x, y, tx, ty, Mat.LAVA)) return false
+    const ti = ty * this.W + tx
+    if (this.heat[ti] < emitTemp[Mat.LAVA]) this.heat[ti] = emitTemp[Mat.LAVA]
+    this.wake(tx, ty)
+    return true
   }
 
   private updateAcid(x: number, y: number): void {
@@ -523,28 +603,19 @@ export class Simulation {
   }
 
   private updateIce(x: number, y: number): void {
-    if (this.touchesHot(x, y) && Math.random() < 0.1) {
+    const i = y * this.W + x
+    // Melt -> water. CHECKED BEFORE re-chilling, against last frame's diffused
+    // value (mirrors lava): re-asserting the cold emission first would pin the
+    // cell below meltPoint forever. Ice in ambient (20 < meltPoint 40) self-
+    // cools and stays frozen; a hot neighbor (fire/lava) overwhelms it.
+    if (this.heat[i] >= meltPoint[Mat.ICE] && Math.random() < 0.1) {
       this.setCell(x, y, Mat.WATER)
       return
     }
-    // Occasionally freeze adjacent water.
-    if (Math.random() < 0.004) {
-      const dirs = [
-        [0, -1],
-        [0, 1],
-        [-1, 0],
-        [1, 0],
-      ]
-      for (const [dx, dy] of dirs) {
-        const nx = x + dx,
-          ny = y + dy
-        if (nx < 0 || ny < 0 || nx >= this.W || ny >= this.H) continue
-        if (this.cells[ny * this.W + nx] === Mat.WATER) {
-          this.setCell(nx, ny, Mat.ICE)
-          return
-        }
-      }
-    }
+    // re-assert the cold emission so ice keeps chilling neighbors via diffusion;
+    // this is what drives the emergent cold freezing of adjacent water.
+    if (this.heat[i] > emitTemp[Mat.ICE]) this.heat[i] = emitTemp[Mat.ICE]
+    this.wake(x, y)
   }
 
   private explode(x: number, y: number): void {
@@ -564,7 +635,40 @@ export class Simulation {
 
   // ---- rendering ---------------------------------------------------------
 
-  private colorOf(m: number, lf: number, ex: number): number {
+  /**
+   * Final on-screen color for a cell. Heat enters two ways: a debug heatmap
+   * (blue->red ramp, ignores material) when `showTemp` is set, and otherwise an
+   * always-on subtle warm tint on ordinary matter (fire/lava are already
+   * saturated + animated, so they're left alone).
+   */
+  private colorOf(m: number, lf: number, ex: number, h: number): number {
+    if (this.showTemp) return this.heatColor(h)
+    const c = this.baseColor(m, lf, ex)
+    if (m === Mat.FIRE || m === Mat.LAVA) return c
+    return this.tint(c, h)
+  }
+
+  /** subtle warm shift: hotter pushes red up / blue down, colder the reverse. */
+  private tint(c: number, h: number): number {
+    let d = (h - AMBIENT) * 0.06
+    if (d < -14) d = -14
+    else if (d > 14) d = 14
+    const r = c & 0xff
+    const g = (c >> 8) & 0xff
+    const b = (c >> 16) & 0xff
+    return rgba(clamp(r + d), g, clamp(b - d))
+  }
+
+  /** debug heatmap ramp: cold -> blue, ambient -> white-ish, hot -> red. */
+  private heatColor(h: number): number {
+    const t = h < -60 ? 0 : h > 600 ? 1 : (h + 60) / 660
+    const r = clamp(255 * Math.min(1, t * 2))
+    const b = clamp(255 * Math.min(1, (1 - t) * 2))
+    const g = clamp(255 * (1 - Math.abs(t - 0.5) * 2))
+    return rgba(r, g, b)
+  }
+
+  private baseColor(m: number, lf: number, ex: number): number {
     switch (m) {
       case Mat.WALL:
         return shade(120, 122, 130, (ex % 16) - 8)
@@ -609,19 +713,20 @@ export class Simulation {
   }
 
   private writeImage(): void {
-    const { W, H, cells, life, extra, buf32, glow32 } = this
+    const { W, H, cells, life, extra, heat, buf32, glow32 } = this
     const n = W * H
     let count = 0
     let emissive = 0
     for (let i = 0; i < n; i++) {
       const m = cells[i]
       if (m === Mat.EMPTY) {
-        buf32[i] = BG
+        // in heatmap mode even empty space shows its temperature.
+        buf32[i] = this.showTemp ? this.heatColor(heat[i]) : BG
         glow32[i] = 0
         continue
       }
       count++
-      const c = this.colorOf(m, life[i], extra[i])
+      const c = this.colorOf(m, life[i], extra[i], heat[i])
       buf32[i] = c
       if (m === Mat.FIRE || m === Mat.LAVA) {
         glow32[i] = c

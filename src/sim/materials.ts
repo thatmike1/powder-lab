@@ -35,6 +35,48 @@ density[Mat.FIRE] = 1
 density[Mat.SMOKE] = 1
 density[Mat.STEAM] = 1
 
+// ---- thermal threshold tables -------------------------------------------
+// Public Float32Arrays indexed directly in the hot loop (same style as
+// `density`), NOT the private+accessor style of isMovable/isDissolvable —
+// these are read per-cell every frame, so we want a bare typed-array load.
+// Units are arbitrary "degrees"; AMBIENT (in Simulation.ts) is 20.
+
+// temperature each material clamps its own cell to every frame (heat sources
+// and sinks). FIRE/LAVA are hot sources; ICE is a cold source below AMBIENT.
+export const emitTemp = new Float32Array(MAT_COUNT)
+// FIRE runs hot so even a flammable touched by a SINGLE flame clears its
+// ignition point: a cell with one neighbor at E and three at AMBIENT settles at
+// (E + 3*AMBIENT)/4, so FIRE=1200 gives a 315 ceiling — above every ignition
+// point below. LAVA stays at 700 (a 190 single-contact ceiling, enough in
+// bulk) BECAUSE raising it would push lava's per-frame value above its
+// freezePoint and silently disable the lava -> stone crust.
+emitTemp[Mat.FIRE] = 1200
+emitTemp[Mat.LAVA] = 700
+emitTemp[Mat.ICE] = -60 // cold source; cold enough to chill neighbors below 0
+
+// flammables -> FIRE when heat >= this. All sit under FIRE's 315 single-contact
+// ceiling so a lone flame still spreads; ordered so wood is the most stubborn.
+export const ignitionPoint = new Float32Array(MAT_COUNT)
+ignitionPoint[Mat.GUNPOWDER] = 120 // sensitive
+ignitionPoint[Mat.OIL] = 150
+ignitionPoint[Mat.PLANT] = 170
+ignitionPoint[Mat.WOOD] = 220
+
+// solid -> liquid when heat >= this (must be > AMBIENT so ice persists at rest).
+export const meltPoint = new Float32Array(MAT_COUNT)
+meltPoint[Mat.ICE] = 40
+
+// liquid -> gas when heat >= this.
+export const boilPoint = new Float32Array(MAT_COUNT)
+boilPoint[Mat.WATER] = 100
+
+// cooling transitions when heat <= this (the target material lives in the
+// update() switch). default 0 means "no transition" for that material.
+export const freezePoint = new Float32Array(MAT_COUNT)
+freezePoint[Mat.WATER] = 0 // -> ICE
+freezePoint[Mat.LAVA] = 500 // -> STONE (emit 700 keeps it liquid while hot)
+freezePoint[Mat.STEAM] = 60 // -> WATER (condense)
+
 // A "movable" cell can be displaced by density swaps (liquids + gases + fire).
 // Powders are intentionally NOT movable-by-others, so water rests on sand etc.
 const movable = new Uint8Array(MAT_COUNT)

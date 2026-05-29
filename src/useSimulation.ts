@@ -9,6 +9,7 @@ export interface SimUiState {
   brush: number
   glow: boolean
   light: boolean
+  showTemp: boolean
   darkness: number
   speed: number
   fps: number
@@ -23,6 +24,7 @@ interface Config {
   brush: number
   glow: boolean
   light: boolean
+  showTemp: boolean
   darkness: number
   speed: number
 }
@@ -36,6 +38,7 @@ export function useSimulation(W: number, H: number, scale: number) {
     brush: 4,
     glow: true,
     light: true,
+    showTemp: false,
     darkness: 0.55,
     speed: 1,
   })
@@ -49,6 +52,7 @@ export function useSimulation(W: number, H: number, scale: number) {
     brush: 4,
     glow: true,
     light: true,
+    showTemp: false,
     darkness: 0.55,
     speed: 1,
     fps: 0,
@@ -138,6 +142,8 @@ export function useSimulation(W: number, H: number, scale: number) {
       if (c.running) sim.step(c.speed)
       // "Faucet": holding the pointer still keeps emitting (great for fluids/fire).
       if (pointer.current.down) paintAt(pointer.current.x, pointer.current.y)
+      // heatmap is a render-time flag on the sim, kept out of render()'s args.
+      sim.setShowTemp(c.showTemp)
       sim.render(ctx, scale, c.glow, c.light, c.darkness)
       frames++
       if (now - fpsT > 500) {
@@ -184,6 +190,10 @@ export function useSimulation(W: number, H: number, scale: number) {
   const toggleLight = useCallback(() => {
     cfg.current.light = !cfg.current.light
     setUi((u) => ({ ...u, light: cfg.current.light }))
+  }, [])
+  const toggleTemp = useCallback(() => {
+    cfg.current.showTemp = !cfg.current.showTemp
+    setUi((u) => ({ ...u, showTemp: cfg.current.showTemp }))
   }, [])
   const setDarkness = useCallback((d: number) => {
     cfg.current.darkness = d
@@ -261,6 +271,10 @@ export function useSimulation(W: number, H: number, scale: number) {
         toggleLight()
         return
       }
+      if (k === 'h') {
+        toggleTemp()
+        return
+      }
       if (k === '[') {
         setBrush(Math.max(1, cfg.current.brush - 1))
         return
@@ -274,7 +288,7 @@ export function useSimulation(W: number, H: number, scale: number) {
     }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
-  }, [toggleRunning, clear, toggleGlow, toggleLight, setBrush, setMaterial])
+  }, [toggleRunning, clear, toggleGlow, toggleLight, toggleTemp, setBrush, setMaterial])
 
   return {
     canvasRef,
@@ -285,6 +299,7 @@ export function useSimulation(W: number, H: number, scale: number) {
     toggleRunning,
     toggleGlow,
     toggleLight,
+    toggleTemp,
     setDarkness,
     stepOnce,
     clear,
