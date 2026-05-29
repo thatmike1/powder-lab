@@ -1,0 +1,704 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Powder Lab — Refined Gallery</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,300;0,9..144,400;0,9..144,500;1,9..144,400&family=Newsreader:opsz,wght@6..72,300;6..72,400;6..72,500&display=swap"
+      rel="stylesheet"
+    />
+    <style>
+      :root {
+        /* deep warm neutral envelope */
+        --bg: oklch(0.16 0.008 60);
+        --bg-haze: oklch(0.2 0.012 62);
+        --ink: oklch(0.92 0.012 70);
+        --ink-soft: oklch(0.74 0.014 68);
+        --ink-faint: oklch(0.56 0.013 66);
+        --ink-ghost: oklch(0.42 0.012 64);
+        --mat: oklch(0.32 0.012 62); /* passe-partout mat */
+        --hairline: oklch(0.34 0.01 62);
+        --hairline-soft: oklch(0.28 0.009 62);
+        /* the single disciplined accent: warm terracotta */
+        --accent: oklch(0.7 0.14 40);
+        --accent-dim: oklch(0.6 0.1 42);
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      html,
+      body {
+        margin: 0;
+        padding: 0;
+      }
+
+      body {
+        background:
+          radial-gradient(
+            120% 90% at 50% 18%,
+            var(--bg-haze) 0%,
+            var(--bg) 62%
+          ),
+          var(--bg);
+        color: var(--ink);
+        font-family: "Newsreader", Georgia, serif;
+        font-weight: 300;
+        -webkit-font-smoothing: antialiased;
+        text-rendering: optimizeLegibility;
+        min-height: 100vh;
+        font-feature-settings: "tnum" 0;
+      }
+
+      .room {
+        max-width: 1180px;
+        margin: 0 auto;
+        padding: clamp(2.5rem, 6vw, 6rem) clamp(1.5rem, 5vw, 5rem)
+          clamp(3rem, 7vw, 7rem);
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) minmax(220px, 280px);
+        column-gap: clamp(3rem, 7vw, 8rem);
+        align-items: start;
+      }
+
+      /* ───────────────────── identity ───────────────────── */
+      .masthead {
+        grid-column: 1 / -1;
+        margin-bottom: clamp(3rem, 8vw, 7rem);
+        display: flex;
+        align-items: baseline;
+        justify-content: space-between;
+        gap: 2rem;
+        flex-wrap: wrap;
+      }
+
+      .wordmark {
+        font-family: "Fraunces", serif;
+        font-weight: 400;
+        font-optical-sizing: auto;
+        font-size: clamp(2.4rem, 5.5vw, 4.4rem);
+        line-height: 0.95;
+        letter-spacing: -0.02em;
+        margin: 0;
+        color: var(--ink);
+      }
+
+      .wordmark em {
+        font-style: italic;
+        font-weight: 300;
+        color: var(--ink-soft);
+      }
+
+      .collection-tag {
+        font-family: "Fraunces", serif;
+        font-size: 0.72rem;
+        font-weight: 500;
+        letter-spacing: 0.34em;
+        text-transform: uppercase;
+        color: var(--ink-faint);
+        white-space: nowrap;
+        padding-bottom: 0.4em;
+      }
+      .collection-tag .no {
+        color: var(--accent);
+      }
+
+      /* ───────────────────── the work (canvas) ───────────────────── */
+      .gallery {
+        grid-column: 1;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+      }
+
+      .frame {
+        width: 100%;
+        max-width: 720px;
+        /* a thin mat / passe-partout border, print-like */
+        background: var(--mat);
+        padding: clamp(0.9rem, 2.2vw, 1.6rem);
+        border: 1px solid var(--hairline);
+        box-shadow:
+          0 1px 0 oklch(0.42 0.012 64 / 0.5) inset,
+          0 40px 80px -40px oklch(0.05 0.01 50 / 0.9);
+      }
+
+      .plate {
+        position: relative;
+        line-height: 0;
+        background: oklch(0.1 0.008 58);
+        outline: 1px solid oklch(0.24 0.008 60);
+      }
+
+      #sim {
+        display: block;
+        width: 100%;
+        max-width: 720px;
+        aspect-ratio: 4 / 3;
+        image-rendering: pixelated;
+        image-rendering: crisp-edges;
+        /* gentle bloom so emissive lava/fire breathe like a backlit print */
+        filter: saturate(1.06) contrast(1.04);
+      }
+
+      /* ───────────────────── caption plate ───────────────────── */
+      .caption {
+        margin-top: clamp(1.4rem, 3vw, 2.4rem);
+        max-width: 65ch;
+        text-align: center;
+        display: flex;
+        flex-direction: column;
+        gap: 0.55rem;
+      }
+
+      .caption .title {
+        font-family: "Fraunces", serif;
+        font-style: italic;
+        font-weight: 400;
+        font-size: 1.18rem;
+        letter-spacing: 0.01em;
+        color: var(--ink);
+      }
+      .caption .title .dim {
+        font-style: normal;
+        color: var(--ink-faint);
+      }
+
+      .caption .meta {
+        font-size: 0.82rem;
+        letter-spacing: 0.04em;
+        color: var(--ink-faint);
+        font-variant-numeric: tabular-nums;
+      }
+      .caption .meta .sep {
+        color: var(--ink-ghost);
+        padding: 0 0.55em;
+      }
+
+      .caption .hud {
+        margin-top: 0.3rem;
+        font-size: 0.7rem;
+        letter-spacing: 0.16em;
+        text-transform: uppercase;
+        color: var(--ink-ghost);
+        font-variant-numeric: tabular-nums;
+      }
+      .caption .hud b {
+        font-weight: 500;
+        color: var(--ink-soft);
+        letter-spacing: 0.08em;
+      }
+
+      /* hint line — a quiet operating note */
+      .hint {
+        margin-top: clamp(2.4rem, 5vw, 4rem);
+        font-style: italic;
+        font-size: 0.86rem;
+        color: var(--ink-ghost);
+        letter-spacing: 0.01em;
+      }
+      .hint .k {
+        font-style: normal;
+        font-family: "Fraunces", serif;
+        font-size: 0.72rem;
+        letter-spacing: 0.06em;
+        color: var(--ink-faint);
+      }
+
+      /* ───────────────────── side: palette + controls ───────────────────── */
+      aside {
+        grid-column: 2;
+        display: flex;
+        flex-direction: column;
+        gap: clamp(2.4rem, 5vw, 3.6rem);
+        padding-top: 0.4rem;
+      }
+
+      .panel-label {
+        font-family: "Fraunces", serif;
+        font-size: 0.66rem;
+        font-weight: 500;
+        letter-spacing: 0.32em;
+        text-transform: uppercase;
+        color: var(--ink-faint);
+        margin: 0 0 1.4rem;
+        padding-bottom: 0.7rem;
+        border-bottom: 1px solid var(--hairline-soft);
+      }
+
+      /* palette — quiet vertical list, no boxes */
+      .group {
+        margin-bottom: 1.7rem;
+      }
+      .group:last-child {
+        margin-bottom: 0;
+      }
+
+      .group-head {
+        font-size: 0.64rem;
+        font-weight: 400;
+        letter-spacing: 0.28em;
+        text-transform: uppercase;
+        color: var(--ink-ghost);
+        margin: 0 0 0.7rem;
+        font-family: "Fraunces", serif;
+      }
+
+      .mat {
+        display: flex;
+        align-items: baseline;
+        gap: 0.7rem;
+        padding: 0.24rem 0;
+        font-size: 0.95rem;
+        color: var(--ink-soft);
+        cursor: default;
+      }
+      .mat:hover {
+        color: var(--ink);
+      }
+
+      .dot {
+        flex: 0 0 auto;
+        width: 8px;
+        height: 8px;
+        border-radius: 50%;
+        background: var(--swatch);
+        box-shadow: 0 0 0 1px oklch(0.5 0.01 60 / 0.4);
+        transform: translateY(-1px);
+      }
+
+      .mat .name {
+        flex: 1 1 auto;
+      }
+      .mat .key {
+        font-size: 0.66rem;
+        letter-spacing: 0.1em;
+        color: var(--ink-ghost);
+        font-variant-numeric: tabular-nums;
+        font-family: "Fraunces", serif;
+      }
+
+      /* selected material (Lava) — subtle: filled accent dot + thin underline */
+      .mat.active {
+        color: var(--ink);
+      }
+      .mat.active .dot {
+        box-shadow:
+          0 0 0 1px var(--accent),
+          0 0 6px oklch(0.7 0.14 40 / 0.4);
+      }
+      .mat.active .name {
+        text-decoration: underline;
+        text-decoration-color: var(--accent);
+        text-underline-offset: 4px;
+        text-decoration-thickness: 1px;
+      }
+      .mat.active .key {
+        color: var(--accent);
+      }
+
+      /* ───────────────────── controls ───────────────────── */
+      .controls {
+        display: flex;
+        flex-direction: column;
+        gap: 1.9rem;
+      }
+
+      .buttons {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 0 1.5rem;
+        align-items: center;
+      }
+
+      .txt-btn {
+        appearance: none;
+        background: none;
+        border: none;
+        padding: 0.2rem 0;
+        font-family: "Newsreader", serif;
+        font-size: 0.95rem;
+        font-weight: 400;
+        letter-spacing: 0.02em;
+        color: var(--ink-faint);
+        cursor: pointer;
+        display: inline-flex;
+        align-items: center;
+        gap: 0.45rem;
+        transition: color 0.15s ease;
+      }
+      .txt-btn:hover {
+        color: var(--ink);
+      }
+      .txt-btn svg {
+        width: 13px;
+        height: 13px;
+        stroke: currentColor;
+        fill: none;
+        stroke-width: 1.4;
+        stroke-linecap: round;
+        stroke-linejoin: round;
+        opacity: 0.85;
+      }
+      .txt-btn.primary {
+        color: var(--ink);
+        font-weight: 500;
+      }
+      .txt-btn.primary svg {
+        fill: var(--accent);
+        stroke: var(--accent);
+        opacity: 1;
+      }
+
+      /* sliders — thin, minimal */
+      .field {
+        display: grid;
+        grid-template-columns: 1fr auto;
+        align-items: baseline;
+        gap: 0.4rem 1rem;
+      }
+      .field .lab {
+        font-size: 0.66rem;
+        letter-spacing: 0.2em;
+        text-transform: uppercase;
+        color: var(--ink-faint);
+        font-family: "Fraunces", serif;
+      }
+      .field .val {
+        font-size: 0.82rem;
+        color: var(--ink-soft);
+        font-variant-numeric: tabular-nums;
+        letter-spacing: 0.02em;
+      }
+
+      input[type="range"] {
+        grid-column: 1 / -1;
+        appearance: none;
+        -webkit-appearance: none;
+        width: 100%;
+        height: 1px;
+        background: var(--hairline);
+        margin: 0.35rem 0 0;
+        cursor: pointer;
+      }
+      input[type="range"]::-webkit-slider-thumb {
+        -webkit-appearance: none;
+        width: 9px;
+        height: 9px;
+        border-radius: 50%;
+        background: var(--ink-soft);
+        border: none;
+        margin-top: 0;
+      }
+      input[type="range"]::-moz-range-thumb {
+        width: 9px;
+        height: 9px;
+        border-radius: 50%;
+        background: var(--ink-soft);
+        border: none;
+      }
+      input[type="range"].accent::-webkit-slider-thumb {
+        background: var(--accent);
+      }
+      input[type="range"].accent::-moz-range-thumb {
+        background: var(--accent);
+      }
+      input[type="range"]:disabled {
+        background: var(--hairline-soft);
+        cursor: default;
+      }
+      input[type="range"]:disabled::-webkit-slider-thumb {
+        background: var(--ink-ghost);
+      }
+      input[type="range"]:disabled::-moz-range-thumb {
+        background: var(--ink-ghost);
+      }
+      .field.disabled .lab,
+      .field.disabled .val {
+        color: var(--ink-ghost);
+      }
+
+      /* toggles — quiet labeled states */
+      .toggle {
+        display: flex;
+        align-items: baseline;
+        justify-content: space-between;
+        gap: 1rem;
+      }
+      .toggle .lab {
+        font-size: 0.66rem;
+        letter-spacing: 0.2em;
+        text-transform: uppercase;
+        color: var(--ink-faint);
+        font-family: "Fraunces", serif;
+      }
+      .toggle .state {
+        font-size: 0.82rem;
+        letter-spacing: 0.08em;
+        color: var(--ink-soft);
+        display: inline-flex;
+        align-items: center;
+        gap: 0.5rem;
+        font-variant-numeric: tabular-nums;
+      }
+      .toggle .state::before {
+        content: "";
+        width: 6px;
+        height: 6px;
+        border-radius: 50%;
+        background: var(--ink-ghost);
+        box-shadow: 0 0 0 1px var(--hairline);
+        transform: translateY(-1px);
+      }
+      .toggle.on .state {
+        color: var(--ink);
+      }
+      .toggle.on .state::before {
+        background: var(--accent);
+        box-shadow: 0 0 6px oklch(0.7 0.14 40 / 0.5);
+      }
+      .toggle.off .state {
+        color: var(--ink-ghost);
+      }
+
+      .divider {
+        height: 1px;
+        background: var(--hairline-soft);
+        border: none;
+        margin: 0;
+      }
+
+      @media (max-width: 820px) {
+        .room {
+          grid-template-columns: 1fr;
+          row-gap: 4rem;
+        }
+        .gallery,
+        aside {
+          grid-column: 1;
+        }
+        aside {
+          max-width: 480px;
+          margin: 0 auto;
+          width: 100%;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <main class="room">
+      <header class="masthead">
+        <h1 class="wordmark">Powder&nbsp;<em>Lab</em></h1>
+        <div class="collection-tag">
+          The Cellular Collection · No.&nbsp;<span class="no">02</span>
+        </div>
+      </header>
+
+      <!-- the work -->
+      <section class="gallery">
+        <div class="frame">
+          <div class="plate">
+            <canvas id="sim"></canvas>
+          </div>
+        </div>
+
+        <figcaption class="caption">
+          <div class="title">
+            Untitled (Lava Field)<span class="dim">, in motion</span>
+          </div>
+          <div class="meta">
+            Cellular automaton on silicon
+            <span class="sep">·</span>
+            grid 160 × 120
+            <span class="sep">·</span>
+            2026
+          </div>
+          <div class="hud">
+            <b>59</b> fps <span class="sep">·</span> <b>12,403</b> particles
+          </div>
+        </figcaption>
+
+        <p class="hint">
+          drag to draw<span style="opacity: 0.5">&nbsp;·&nbsp;</span>right-click
+          to erase<span style="opacity: 0.5">&nbsp;·&nbsp;</span
+          ><span class="k">SPACE</span> to pause
+        </p>
+      </section>
+
+      <!-- side panel -->
+      <aside>
+        <section class="palette">
+          <p class="panel-label">Materials</p>
+
+          <div class="group">
+            <p class="group-head">Tools</p>
+            <div class="mat">
+              <span class="dot" style="--swatch: rgb(30, 33, 38)"></span>
+              <span class="name">Eraser</span>
+              <span class="key">E</span>
+            </div>
+            <div class="mat">
+              <span class="dot" style="--swatch: rgb(120, 122, 130)"></span>
+              <span class="name">Wall</span>
+              <span class="key">W</span>
+            </div>
+          </div>
+
+          <div class="group">
+            <p class="group-head">Powders</p>
+            <div class="mat">
+              <span class="dot" style="--swatch: rgb(196, 180, 120)"></span>
+              <span class="name">Sand</span>
+              <span class="key">1</span>
+            </div>
+            <div class="mat">
+              <span class="dot" style="--swatch: rgb(70, 68, 78)"></span>
+              <span class="name">Gunpowder</span>
+              <span class="key">2</span>
+            </div>
+          </div>
+
+          <div class="group">
+            <p class="group-head">Liquids</p>
+            <div class="mat">
+              <span class="dot" style="--swatch: rgb(54, 108, 200)"></span>
+              <span class="name">Water</span>
+              <span class="key">3</span>
+            </div>
+            <div class="mat">
+              <span class="dot" style="--swatch: rgb(78, 66, 44)"></span>
+              <span class="name">Oil</span>
+              <span class="key">4</span>
+            </div>
+            <div class="mat">
+              <span class="dot" style="--swatch: rgb(120, 214, 70)"></span>
+              <span class="name">Acid</span>
+              <span class="key">5</span>
+            </div>
+            <div class="mat active">
+              <span class="dot" style="--swatch: rgb(255, 110, 30)"></span>
+              <span class="name">Lava</span>
+              <span class="key">6</span>
+            </div>
+          </div>
+
+          <div class="group">
+            <p class="group-head">Solids</p>
+            <div class="mat">
+              <span class="dot" style="--swatch: rgb(98, 98, 106)"></span>
+              <span class="name">Stone</span>
+              <span class="key">7</span>
+            </div>
+            <div class="mat">
+              <span class="dot" style="--swatch: rgb(112, 74, 42)"></span>
+              <span class="name">Wood</span>
+              <span class="key">8</span>
+            </div>
+            <div class="mat">
+              <span class="dot" style="--swatch: rgb(46, 160, 60)"></span>
+              <span class="name">Plant</span>
+              <span class="key">9</span>
+            </div>
+            <div class="mat">
+              <span class="dot" style="--swatch: rgb(170, 210, 235)"></span>
+              <span class="name">Ice</span>
+              <span class="key">0</span>
+            </div>
+          </div>
+
+          <div class="group">
+            <p class="group-head">Energy</p>
+            <div class="mat">
+              <span class="dot" style="--swatch: rgb(255, 150, 40)"></span>
+              <span class="name">Fire</span>
+              <span class="key">F</span>
+            </div>
+            <div class="mat">
+              <span class="dot" style="--swatch: rgb(90, 90, 96)"></span>
+              <span class="name">Smoke</span>
+              <span class="key">S</span>
+            </div>
+            <div class="mat">
+              <span class="dot" style="--swatch: rgb(205, 210, 220)"></span>
+              <span class="name">Steam</span>
+              <span class="key">T</span>
+            </div>
+          </div>
+        </section>
+
+        <hr class="divider" />
+
+        <section class="controls">
+          <div class="buttons">
+            <button class="txt-btn primary" type="button" aria-label="Pause">
+              <svg viewBox="0 0 24 24" aria-hidden="true">
+                <rect x="7" y="5" width="3.4" height="14" rx="0.6" />
+                <rect x="13.6" y="5" width="3.4" height="14" rx="0.6" />
+              </svg>
+              Pause
+            </button>
+            <button class="txt-btn" type="button" aria-label="Step">
+              <svg viewBox="0 0 24 24" aria-hidden="true">
+                <path d="M7 5l9 7-9 7z" />
+                <path d="M17 5v14" />
+              </svg>
+              Step
+            </button>
+            <button class="txt-btn" type="button" aria-label="Clear">
+              <svg viewBox="0 0 24 24" aria-hidden="true">
+                <path d="M5 7h14" />
+                <path d="M9 7V5h6v2" />
+                <path d="M7 7l1 13h8l1-13" />
+              </svg>
+              Clear
+            </button>
+          </div>
+
+          <div class="field">
+            <span class="lab">Brush</span>
+            <span class="val">18</span>
+            <input type="range" min="1" max="40" value="18" />
+          </div>
+
+          <div class="field">
+            <span class="lab">Speed</span>
+            <span class="val">2×</span>
+            <input type="range" min="1" max="6" value="2" />
+          </div>
+
+          <div class="toggle on">
+            <span class="lab">Glow</span>
+            <span class="state">On</span>
+          </div>
+
+          <div class="toggle off">
+            <span class="lab">Light</span>
+            <span class="state">Off</span>
+          </div>
+
+          <div class="field disabled">
+            <span class="lab">Darkness</span>
+            <span class="val">—</span>
+            <input
+              type="range"
+              min="0"
+              max="100"
+              value="0"
+              disabled
+              aria-disabled="true"
+            />
+          </div>
+        </section>
+      </aside>
+    </main>
+
+    <script src="sand.js"></script>
+    <script>
+      mountSand(document.getElementById("sim"));
+    </script>
+  </body>
+</html>

@@ -1,0 +1,756 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Powder Lab — Brutalist Editorial</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Archivo:wght@400;500;700;900&family=Space+Grotesk:wght@400;500;700&family=Space+Mono:wght@400;700&display=swap" rel="stylesheet" />
+<style>
+  :root {
+    /* paper / ink — never pure black or white */
+    --paper:        oklch(0.95 0.005 90);
+    --paper-dim:    oklch(0.92 0.006 90);
+    --paper-edge:   oklch(0.88 0.008 90);
+    --ink:          oklch(0.18 0.01 90);
+    --ink-soft:     oklch(0.34 0.012 90);
+    --ink-faint:    oklch(0.55 0.012 90);
+    /* one hot accent: vermilion */
+    --vermilion:    oklch(0.65 0.24 28);
+    --vermilion-dk: oklch(0.55 0.22 28);
+
+    --rule: 1px solid var(--ink);
+    --rule-faint: 1px solid var(--paper-edge);
+
+    --mono: "Space Mono", ui-monospace, "SFMono-Regular", Menlo, monospace;
+    --display: "Archivo", "Helvetica Neue", Helvetica, Arial, sans-serif;
+    --grotesk: "Space Grotesk", "Archivo", Helvetica, Arial, sans-serif;
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  html, body {
+    background: var(--paper);
+    color: var(--ink);
+    font-family: var(--grotesk);
+    -webkit-font-smoothing: antialiased;
+    font-feature-settings: "tnum" 1;
+  }
+
+  /* faint exposed background grid */
+  body {
+    min-height: 100vh;
+    background-image:
+      linear-gradient(to right, oklch(0.18 0.01 90 / 0.04) 1px, transparent 1px),
+      linear-gradient(to bottom, oklch(0.18 0.01 90 / 0.04) 1px, transparent 1px);
+    background-size: 32px 32px;
+    padding: 0;
+  }
+
+  .sheet {
+    max-width: 1180px;
+    margin: 0 auto;
+    border-left: var(--rule);
+    border-right: var(--rule);
+    background: var(--paper);
+    min-height: 100vh;
+  }
+
+  /* ============ MASTHEAD ============ */
+  .masthead {
+    border-bottom: var(--rule);
+    display: grid;
+    grid-template-columns: 1fr auto;
+    align-items: stretch;
+  }
+  .masthead-left {
+    padding: 20px 28px 16px;
+    display: flex;
+    flex-direction: column;
+    justify-content: flex-end;
+  }
+  .kicker {
+    font-family: var(--mono);
+    font-size: 11px;
+    letter-spacing: 0.22em;
+    text-transform: uppercase;
+    color: var(--ink-soft);
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-bottom: 10px;
+  }
+  .reg-mark {
+    color: var(--vermilion);
+    font-weight: 700;
+  }
+  .title {
+    font-family: var(--display);
+    font-weight: 900;
+    font-size: clamp(44px, 8.5vw, 104px);
+    line-height: 0.86;
+    letter-spacing: -0.03em;
+    text-transform: uppercase;
+  }
+  .title .lab { color: var(--vermilion); }
+  .masthead-right {
+    border-left: var(--rule);
+    font-family: var(--mono);
+    font-size: 10.5px;
+    letter-spacing: 0.04em;
+    min-width: 188px;
+    display: grid;
+    grid-template-rows: repeat(4, 1fr);
+  }
+  .colophon {
+    padding: 9px 16px;
+    border-bottom: var(--rule-faint);
+    display: flex;
+    justify-content: space-between;
+    gap: 12px;
+    color: var(--ink-soft);
+    text-transform: uppercase;
+  }
+  .colophon:last-child { border-bottom: 0; }
+  .colophon b { color: var(--ink); font-weight: 700; }
+
+  /* ============ HUD DATA ROW ============ */
+  .hud {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    border-bottom: var(--rule);
+  }
+  .hud-cell {
+    padding: 14px 24px 12px;
+    border-right: var(--rule-faint);
+    display: flex;
+    align-items: baseline;
+    gap: 12px;
+  }
+  .hud-cell:last-child { border-right: 0; }
+  .hud-val {
+    font-family: var(--mono);
+    font-weight: 700;
+    font-size: 28px;
+    letter-spacing: -0.01em;
+    font-variant-numeric: tabular-nums;
+  }
+  .hud-slash { color: var(--vermilion); font-family: var(--mono); font-size: 22px; }
+  .hud-label {
+    font-family: var(--mono);
+    font-size: 10px;
+    letter-spacing: 0.2em;
+    text-transform: uppercase;
+    color: var(--ink-faint);
+  }
+
+  /* ============ MAIN BODY GRID ============ */
+  .body-grid {
+    display: grid;
+    grid-template-columns: 1fr minmax(330px, 360px);
+  }
+  @media (max-width: 880px) {
+    .body-grid { grid-template-columns: 1fr; }
+    .stage-col { border-right: 0 !important; }
+  }
+
+  /* ---- STAGE COLUMN ---- */
+  .stage-col {
+    border-right: var(--rule);
+    padding: 28px 28px 32px;
+    display: flex;
+    flex-direction: column;
+    gap: 18px;
+  }
+  .stage-head {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    font-family: var(--mono);
+    font-size: 10.5px;
+    letter-spacing: 0.18em;
+    text-transform: uppercase;
+    color: var(--ink-soft);
+    border-bottom: var(--rule);
+    padding-bottom: 8px;
+  }
+  .stage-head .fig { color: var(--vermilion); font-weight: 700; }
+
+  .stage-frame {
+    position: relative;
+    align-self: center;
+    width: 100%;
+    max-width: 720px;
+    padding: 14px;
+  }
+  /* corner registration / crop marks */
+  .stage-frame::before,
+  .stage-frame::after,
+  .crop-tr, .crop-bl {
+    content: "";
+    position: absolute;
+    width: 16px;
+    height: 16px;
+    pointer-events: none;
+  }
+  .stage-frame::before { /* top-left */
+    top: 0; left: 0;
+    border-top: var(--rule);
+    border-left: var(--rule);
+  }
+  .stage-frame::after { /* bottom-right */
+    bottom: 0; right: 0;
+    border-bottom: var(--rule);
+    border-right: var(--rule);
+  }
+  .crop-tr { top: 0; right: 0; border-top: var(--rule); border-right: var(--rule); }
+  .crop-bl { bottom: 0; left: 0; border-bottom: var(--rule); border-left: var(--rule); }
+
+  .canvas-wrap {
+    border: var(--rule);
+    background: oklch(0.16 0.012 90);
+    position: relative;
+  }
+  canvas#sim {
+    display: block;
+    width: 100%;
+    max-width: 720px;
+    aspect-ratio: 4 / 3;
+    image-rendering: pixelated;
+    image-rendering: crisp-edges;
+    filter: saturate(1.05) contrast(1.04) brightness(1.04) drop-shadow(0 0 6px oklch(0.65 0.24 28 / 0.18));
+  }
+  .canvas-tag {
+    position: absolute;
+    top: 0; left: 0;
+    font-family: var(--mono);
+    font-size: 9.5px;
+    letter-spacing: 0.16em;
+    text-transform: uppercase;
+    background: var(--vermilion);
+    color: var(--paper);
+    padding: 3px 8px;
+    z-index: 2;
+  }
+  .hint {
+    font-family: var(--mono);
+    font-size: 11px;
+    letter-spacing: 0.04em;
+    color: var(--ink-soft);
+    text-align: center;
+    text-transform: uppercase;
+  }
+  .hint b { color: var(--ink); }
+  .hint .sep { color: var(--vermilion); padding: 0 6px; }
+
+  /* ---- CONTROL COLUMN ---- */
+  .ctrl-col { display: flex; flex-direction: column; }
+
+  .section-bar {
+    font-family: var(--mono);
+    font-size: 10px;
+    letter-spacing: 0.24em;
+    text-transform: uppercase;
+    padding: 8px 18px;
+    border-bottom: var(--rule);
+    background: var(--ink);
+    color: var(--paper);
+    display: flex;
+    justify-content: space-between;
+  }
+  .section-bar .idx { color: var(--vermilion); }
+
+  /* ===== PALETTE TABLE ===== */
+  .palette { border-bottom: var(--rule); }
+  .cat-row {
+    display: grid;
+    grid-template-columns: 78px 1fr;
+    border-bottom: var(--rule-faint);
+  }
+  .cat-row:last-child { border-bottom: 0; }
+  .cat-name {
+    font-family: var(--mono);
+    font-size: 9.5px;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    color: var(--ink-soft);
+    padding: 10px 0 0 14px;
+    writing-mode: horizontal-tb;
+    border-right: var(--rule-faint);
+  }
+  .mat-cells { display: grid; grid-template-columns: 1fr 1fr; }
+  .cat-row.single .mat-cells { grid-template-columns: 1fr 1fr; }
+
+  .mat {
+    display: grid;
+    grid-template-columns: 22px 1fr 18px;
+    align-items: center;
+    gap: 9px;
+    padding: 8px 10px;
+    border-left: var(--rule-faint);
+    border-bottom: var(--rule-faint);
+    background: var(--paper);
+    cursor: pointer;
+    position: relative;
+  }
+  .mat:nth-child(odd) { border-left: 0; }
+  .mat-cells .mat:nth-last-child(-n+2) { /* keep bottom rule for table feel via row border */ }
+  .swatch {
+    width: 22px; height: 22px;
+    border: var(--rule);
+    box-sizing: border-box;
+  }
+  .mat-name {
+    font-family: var(--grotesk);
+    font-weight: 500;
+    font-size: 13px;
+    letter-spacing: -0.005em;
+    text-transform: uppercase;
+  }
+  .mat-key {
+    font-family: var(--mono);
+    font-size: 10px;
+    font-weight: 700;
+    text-align: center;
+    border: var(--rule-faint);
+    color: var(--ink-soft);
+    padding: 1px 0;
+  }
+  /* ACTIVE = inverted ink fill, paper text (Lava) */
+  .mat.active {
+    background: var(--ink);
+    color: var(--paper);
+    border-left-color: var(--ink);
+  }
+  .mat.active .mat-name { color: var(--paper); }
+  .mat.active .mat-key { color: var(--paper); border-color: var(--paper-edge); }
+  .mat.active .swatch { box-shadow: 0 0 0 2px var(--ink), 0 0 0 3px var(--vermilion); }
+  .mat.active::after {
+    content: "◀";
+    position: absolute;
+    right: 4px; top: 50%;
+    transform: translateY(-50%);
+    color: var(--vermilion);
+    font-size: 9px;
+  }
+
+  /* ===== CONTROLS ===== */
+  .controls { display: flex; flex-direction: column; }
+
+  .btn-row {
+    display: grid;
+    grid-template-columns: 1.4fr 1fr 1fr;
+    border-bottom: var(--rule);
+  }
+  .btn {
+    font-family: var(--mono);
+    font-size: 12px;
+    font-weight: 700;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    padding: 16px 8px;
+    background: var(--paper);
+    color: var(--ink);
+    border: 0;
+    border-right: var(--rule-faint);
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+  }
+  .btn:last-child { border-right: 0; }
+  .btn svg { width: 13px; height: 13px; display: block; }
+  .btn.primary {
+    background: var(--vermilion);
+    color: var(--paper);
+  }
+  .btn.primary svg { fill: var(--paper); }
+  .btn:not(.primary) svg { fill: var(--ink); }
+  .btn:hover { background: var(--paper-dim); }
+  .btn.primary:hover { background: var(--vermilion-dk); }
+
+  /* sliders */
+  .field {
+    padding: 14px 18px 16px;
+    border-bottom: var(--rule-faint);
+  }
+  .field-head {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    margin-bottom: 11px;
+  }
+  .field-label {
+    font-family: var(--mono);
+    font-size: 10px;
+    letter-spacing: 0.18em;
+    text-transform: uppercase;
+    color: var(--ink-soft);
+  }
+  .field-val {
+    font-family: var(--mono);
+    font-size: 13px;
+    font-weight: 700;
+    font-variant-numeric: tabular-nums;
+  }
+  .field-val .unit { color: var(--vermilion); }
+
+  input[type="range"] {
+    -webkit-appearance: none;
+    appearance: none;
+    width: 100%;
+    height: 14px;
+    background: transparent;
+    cursor: pointer;
+  }
+  input[type="range"]::-webkit-slider-runnable-track {
+    height: 2px;
+    background: var(--ink);
+  }
+  input[type="range"]::-moz-range-track {
+    height: 2px;
+    background: var(--ink);
+  }
+  input[type="range"]::-webkit-slider-thumb {
+    -webkit-appearance: none;
+    appearance: none;
+    width: 12px; height: 18px;
+    background: var(--vermilion);
+    border: 1px solid var(--ink);
+    margin-top: -8px;
+    border-radius: 0;
+  }
+  input[type="range"]::-moz-range-thumb {
+    width: 12px; height: 18px;
+    background: var(--vermilion);
+    border: 1px solid var(--ink);
+    border-radius: 0;
+  }
+  .field.disabled { opacity: 0.42; }
+  .field.disabled input[type="range"]::-webkit-slider-thumb { background: var(--ink-faint); }
+  .field.disabled input[type="range"]::-moz-range-thumb { background: var(--ink-faint); }
+  .ticks {
+    display: flex;
+    justify-content: space-between;
+    font-family: var(--mono);
+    font-size: 9px;
+    color: var(--ink-faint);
+    margin-top: 6px;
+    letter-spacing: 0.06em;
+  }
+
+  /* toggles */
+  .toggle-row {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    border-bottom: var(--rule-faint);
+  }
+  .toggle {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+    padding: 14px 18px;
+    border-right: var(--rule-faint);
+    cursor: pointer;
+  }
+  .toggle:last-child { border-right: 0; }
+  .toggle-label {
+    font-family: var(--mono);
+    font-size: 10px;
+    letter-spacing: 0.16em;
+    text-transform: uppercase;
+    color: var(--ink-soft);
+  }
+  .tbox {
+    display: flex;
+    border: var(--rule);
+    font-family: var(--mono);
+    font-size: 9px;
+    font-weight: 700;
+    letter-spacing: 0.1em;
+  }
+  .tbox span {
+    padding: 4px 7px;
+    background: var(--paper);
+    color: var(--ink-faint);
+  }
+  .tbox span.on-cell { border-right: var(--rule); }
+  .toggle.on .tbox span.on-cell { background: var(--vermilion); color: var(--paper); }
+  .toggle.off .tbox span.off-cell { background: var(--ink); color: var(--paper); }
+
+  /* footer rule */
+  .foot {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 10px 28px;
+    border-top: var(--rule);
+    font-family: var(--mono);
+    font-size: 10px;
+    letter-spacing: 0.16em;
+    text-transform: uppercase;
+    color: var(--ink-faint);
+  }
+  .foot .reg-mark { color: var(--vermilion); }
+</style>
+</head>
+<body>
+  <div class="sheet">
+
+    <!-- ===================== MASTHEAD ===================== -->
+    <header class="masthead">
+      <div class="masthead-left">
+        <div class="kicker">
+          <span class="reg-mark">✚</span>
+          <span>Falling-Sand Cellular Automaton</span>
+          <span>·</span>
+          <span>No. 05</span>
+        </div>
+        <h1 class="title">Powder<br />&shy;<span class="lab">Lab</span></h1>
+      </div>
+      <div class="masthead-right">
+        <div class="colophon"><span>Edition</span><b>Brutalist</b></div>
+        <div class="colophon"><span>Grid</span><b>160 × 120</b></div>
+        <div class="colophon"><span>Engine</span><b>v2.4</b></div>
+        <div class="colophon"><span>Status</span><b>Live</b></div>
+      </div>
+    </header>
+
+    <!-- ===================== HUD DATA ROW ===================== -->
+    <section class="hud">
+      <div class="hud-cell">
+        <span class="hud-val">59</span>
+        <span class="hud-slash">/</span>
+        <span class="hud-label">FPS</span>
+      </div>
+      <div class="hud-cell">
+        <span class="hud-val">12,403</span>
+        <span class="hud-slash">/</span>
+        <span class="hud-label">Particles</span>
+      </div>
+      <div class="hud-cell">
+        <span class="hud-val">LAVA</span>
+        <span class="hud-slash">/</span>
+        <span class="hud-label">Active Material</span>
+      </div>
+    </section>
+
+    <!-- ===================== BODY ===================== -->
+    <div class="body-grid">
+
+      <!-- ---------- STAGE ---------- -->
+      <main class="stage-col">
+        <div class="stage-head">
+          <span>FIG. 01 — Simulation Viewport</span>
+          <span class="fig">↳ 4:3 / PIXELATED</span>
+        </div>
+
+        <div class="stage-frame">
+          <span class="crop-tr"></span>
+          <span class="crop-bl"></span>
+          <div class="canvas-wrap">
+            <span class="canvas-tag">REC ▮ LIVE</span>
+            <canvas id="sim"></canvas>
+          </div>
+        </div>
+
+        <p class="hint">
+          <b>DRAG</b> TO DRAW
+          <span class="sep">·</span>
+          <b>RIGHT-CLICK</b> TO ERASE
+          <span class="sep">·</span>
+          <b>SPACE</b> = PAUSE
+        </p>
+      </main>
+
+      <!-- ---------- CONTROL PANEL ---------- -->
+      <aside class="ctrl-col">
+
+        <!-- PALETTE -->
+        <div class="section-bar"><span>Material Index</span><span class="idx">§ A</span></div>
+        <div class="palette">
+
+          <div class="cat-row">
+            <div class="cat-name">Tools</div>
+            <div class="mat-cells">
+              <button type="button" class="mat">
+                <span class="swatch" style="background: rgb(30,33,38)"></span>
+                <span class="mat-name">Eraser</span>
+                <span class="mat-key">E</span>
+              </button>
+              <button type="button" class="mat">
+                <span class="swatch" style="background: rgb(120,122,130)"></span>
+                <span class="mat-name">Wall</span>
+                <span class="mat-key">W</span>
+              </button>
+            </div>
+          </div>
+
+          <div class="cat-row">
+            <div class="cat-name">Powders</div>
+            <div class="mat-cells">
+              <button type="button" class="mat">
+                <span class="swatch" style="background: rgb(196,180,120)"></span>
+                <span class="mat-name">Sand</span>
+                <span class="mat-key">1</span>
+              </button>
+              <button type="button" class="mat">
+                <span class="swatch" style="background: rgb(70,68,78)"></span>
+                <span class="mat-name">Gunpwd</span>
+                <span class="mat-key">2</span>
+              </button>
+            </div>
+          </div>
+
+          <div class="cat-row">
+            <div class="cat-name">Liquids</div>
+            <div class="mat-cells">
+              <button type="button" class="mat">
+                <span class="swatch" style="background: rgb(54,108,200)"></span>
+                <span class="mat-name">Water</span>
+                <span class="mat-key">3</span>
+              </button>
+              <button type="button" class="mat">
+                <span class="swatch" style="background: rgb(78,66,44)"></span>
+                <span class="mat-name">Oil</span>
+                <span class="mat-key">4</span>
+              </button>
+              <button type="button" class="mat">
+                <span class="swatch" style="background: rgb(120,214,70)"></span>
+                <span class="mat-name">Acid</span>
+                <span class="mat-key">5</span>
+              </button>
+              <button type="button" class="mat active">
+                <span class="swatch" style="background: rgb(255,110,30)"></span>
+                <span class="mat-name">Lava</span>
+                <span class="mat-key">6</span>
+              </button>
+            </div>
+          </div>
+
+          <div class="cat-row">
+            <div class="cat-name">Solids</div>
+            <div class="mat-cells">
+              <button type="button" class="mat">
+                <span class="swatch" style="background: rgb(98,98,106)"></span>
+                <span class="mat-name">Stone</span>
+                <span class="mat-key">7</span>
+              </button>
+              <button type="button" class="mat">
+                <span class="swatch" style="background: rgb(112,74,42)"></span>
+                <span class="mat-name">Wood</span>
+                <span class="mat-key">8</span>
+              </button>
+              <button type="button" class="mat">
+                <span class="swatch" style="background: rgb(46,160,60)"></span>
+                <span class="mat-name">Plant</span>
+                <span class="mat-key">9</span>
+              </button>
+              <button type="button" class="mat">
+                <span class="swatch" style="background: rgb(170,210,235)"></span>
+                <span class="mat-name">Ice</span>
+                <span class="mat-key">0</span>
+              </button>
+            </div>
+          </div>
+
+          <div class="cat-row">
+            <div class="cat-name">Energy</div>
+            <div class="mat-cells">
+              <button type="button" class="mat">
+                <span class="swatch" style="background: rgb(255,150,40)"></span>
+                <span class="mat-name">Fire</span>
+                <span class="mat-key">F</span>
+              </button>
+              <button type="button" class="mat">
+                <span class="swatch" style="background: rgb(90,90,96)"></span>
+                <span class="mat-name">Smoke</span>
+                <span class="mat-key">S</span>
+              </button>
+              <button type="button" class="mat">
+                <span class="swatch" style="background: rgb(205,210,220)"></span>
+                <span class="mat-name">Steam</span>
+                <span class="mat-key">T</span>
+              </button>
+            </div>
+          </div>
+
+        </div>
+
+        <!-- CONTROLS -->
+        <div class="section-bar"><span>Controls</span><span class="idx">§ B</span></div>
+        <div class="controls">
+
+          <div class="btn-row">
+            <button type="button" class="btn primary">
+              <svg viewBox="0 0 12 12" aria-hidden="true"><path d="M2 1 L11 6 L2 11 Z"/></svg>
+              Play
+            </button>
+            <button type="button" class="btn">
+              <svg viewBox="0 0 12 12" aria-hidden="true"><path d="M2 1 L9 6 L2 11 Z"/><rect x="9.5" y="1" width="1.6" height="10"/></svg>
+              Step
+            </button>
+            <button type="button" class="btn">
+              <svg viewBox="0 0 12 12" aria-hidden="true"><path d="M2 2 L10 10 M10 2 L2 10" stroke-width="1.8" stroke="currentColor" fill="none"/></svg>
+              Clear
+            </button>
+          </div>
+
+          <div class="field">
+            <div class="field-head">
+              <span class="field-label">Brush Radius</span>
+              <span class="field-val">18<span class="unit"> PX</span></span>
+            </div>
+            <input type="range" min="1" max="40" value="18" />
+            <div class="ticks"><span>01</span><span>20</span><span>40</span></div>
+          </div>
+
+          <div class="field">
+            <div class="field-head">
+              <span class="field-label">Sim Speed</span>
+              <span class="field-val">2<span class="unit">×</span></span>
+            </div>
+            <input type="range" min="1" max="6" value="2" />
+            <div class="ticks"><span>1×</span><span>3×</span><span>6×</span></div>
+          </div>
+
+          <div class="toggle-row">
+            <button type="button" class="toggle on">
+              <span class="toggle-label">Glow</span>
+              <span class="tbox"><span class="on-cell">ON</span><span class="off-cell">OFF</span></span>
+            </button>
+            <button type="button" class="toggle off">
+              <span class="toggle-label">Light</span>
+              <span class="tbox"><span class="on-cell">ON</span><span class="off-cell">OFF</span></span>
+            </button>
+          </div>
+
+          <div class="field disabled">
+            <div class="field-head">
+              <span class="field-label">Darkness · req. Light</span>
+              <span class="field-val">—</span>
+            </div>
+            <input type="range" min="0" max="100" value="0" disabled />
+            <div class="ticks"><span>00</span><span>50</span><span>100</span></div>
+          </div>
+
+        </div>
+      </aside>
+    </div>
+
+    <!-- ===================== FOOTER ===================== -->
+    <footer class="foot">
+      <span><span class="reg-mark">✚</span> Powder Lab — Technical Datasheet</span>
+      <span>SET IN ARCHIVO + SPACE MONO</span>
+      <span>© 2026</span>
+    </footer>
+
+  </div>
+
+  <script src="sand.js"></script>
+  <script>mountSand(document.getElementById('sim'));</script>
+</body>
+</html>

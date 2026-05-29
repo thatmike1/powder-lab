@@ -1,0 +1,855 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Powder Lab — In-World (Noita)</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&family=Silkscreen:wght@400;700&display=swap" rel="stylesheet" />
+<style>
+  /* ============================================================
+     POWDER LAB — In-World (Noita) flavor
+     Pixel-native chrome carved from the cave the sim lives in.
+     LAWS: --px:4px grid · CRISP ONLY · glow = concentric hard
+     dither rings · hand-pixeled SVG icons · bitmap type.
+     ============================================================ */
+
+  :root {
+    --px: 4px;
+
+    /* warm near-black cave ground */
+    --ground:      oklch(0.15 0.012 50);
+    --ground-deep: oklch(0.10 0.010 45);
+    --stone:       oklch(0.22 0.012 55);
+    --stone-lit:   oklch(0.30 0.014 58);  /* top-left bevel highlight */
+    --stone-dark:  oklch(0.10 0.010 45);  /* bottom-right bevel shadow */
+    --stone-face:  oklch(0.20 0.011 52);
+    --slot:        oklch(0.12 0.010 48);
+
+    /* firelight accent */
+    --lava:        rgb(255, 110, 30);
+    --lava-dim:    rgb(150, 62, 16);
+    --ember:       rgb(255, 150, 40);
+
+    --ink:         oklch(0.78 0.02 70);   /* readable warm parchment text */
+    --ink-dim:     oklch(0.52 0.018 60);
+    --ink-faint:   oklch(0.38 0.014 55);
+
+    --rune-grid:   oklch(0.26 0.012 55);
+  }
+
+  * { box-sizing: border-box; }
+
+  html, body {
+    margin: 0;
+    padding: 0;
+    background: var(--ground-deep);
+    color: var(--ink);
+    font-family: "Silkscreen", monospace;
+    -webkit-font-smoothing: none;
+    font-smooth: never;
+    image-rendering: pixelated;
+  }
+
+  /* dithered vignette darkening the page edges — hard-stop, no blur.
+     two tiled checker layers plus a hard radial step-mask of darkness. */
+  body {
+    min-height: 100vh;
+    padding: calc(var(--px) * 6);
+    position: relative;
+    background-color: var(--ground-deep);
+    background-image:
+      /* edge darkening: hard concentric steps via repeating conic-ish dither */
+      linear-gradient(45deg, rgba(0,0,0,0.5) 25%, transparent 25% 75%, rgba(0,0,0,0.5) 75%),
+      linear-gradient(45deg, rgba(0,0,0,0.5) 25%, transparent 25% 75%, rgba(0,0,0,0.5) 75%);
+    background-size: 8px 8px;
+    background-position: 0 0, 4px 4px;
+  }
+  /* vignette ring as a separate hard-edged overlay */
+  body::before {
+    content: "";
+    position: fixed;
+    inset: 0;
+    pointer-events: none;
+    z-index: 0;
+    background:
+      radial-gradient(
+        ellipse 120% 120% at 50% 42%,
+        transparent 0,
+        transparent 45%,
+        rgba(0,0,0,0.30) 45%,
+        rgba(0,0,0,0.30) 62%,
+        rgba(0,0,0,0.55) 62%,
+        rgba(0,0,0,0.55) 80%,
+        rgba(0,0,0,0.78) 80%
+      );
+  }
+
+  /* ---- shared dither texture mixin via utility classes ---- */
+  /* stone face noise: hard-stop checker, tiny + low-contrast */
+  .dither-stone {
+    background-color: var(--stone-face);
+    background-image:
+      linear-gradient(45deg, rgba(255,255,255,0.025) 25%, transparent 25% 75%, rgba(255,255,255,0.025) 75%),
+      linear-gradient(45deg, rgba(0,0,0,0.20) 25%, transparent 25% 75%, rgba(0,0,0,0.20) 75%);
+    background-size: 4px 4px, 8px 8px;
+    background-position: 0 0, 4px 4px;
+  }
+
+  /* ---- carved pixel bevel: hard shadows, blur-radius 0 ---- */
+  .bevel {
+    box-shadow:
+      inset 2px 2px 0 0 var(--stone-lit),
+      inset -2px -2px 0 0 var(--stone-dark),
+      0 0 0 2px var(--ground-deep),
+      0 0 0 4px var(--stone-dark);
+  }
+  .bevel-in {
+    box-shadow:
+      inset 2px 2px 0 0 var(--stone-dark),
+      inset -2px -2px 0 0 var(--stone-lit);
+  }
+
+  .wrap {
+    position: relative;
+    z-index: 1;
+    max-width: 1100px;
+    margin: 0 auto;
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: calc(var(--px) * 6);
+  }
+
+  /* ============================ HEADER ============================ */
+  header.bar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: calc(var(--px) * 4);
+    flex-wrap: wrap;
+    padding: calc(var(--px) * 5) calc(var(--px) * 6);
+    border: 0;
+  }
+
+  .wordmark {
+    display: flex;
+    align-items: center;
+    gap: calc(var(--px) * 4);
+  }
+  .crest {
+    width: 48px;
+    height: 48px;
+    display: block;
+    fill: var(--lava);
+  }
+  .wordmark h1 {
+    margin: 0;
+    font-family: "Press Start 2P", monospace;
+    font-size: 22px;
+    line-height: 1.1;
+    letter-spacing: 1px;
+    color: var(--ink);
+    /* hard pixel drop + firelight underglint, blur 0 */
+    text-shadow:
+      2px 2px 0 var(--ground-deep),
+      4px 4px 0 rgba(0,0,0,0.6),
+      0 -2px 0 var(--lava-dim);
+  }
+  .wordmark .sub {
+    display: block;
+    margin-top: calc(var(--px) * 2);
+    font-family: "Silkscreen", monospace;
+    font-size: 10px;
+    letter-spacing: 3px;
+    color: var(--lava);
+    text-shadow: 1px 1px 0 var(--ground-deep);
+  }
+
+  /* HUD readouts — corner game-overlay style */
+  .hud {
+    display: flex;
+    gap: calc(var(--px) * 3);
+    align-items: stretch;
+  }
+  .readout {
+    padding: calc(var(--px) * 2) calc(var(--px) * 3);
+    background-color: var(--slot);
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    min-width: 96px;
+  }
+  .readout .val {
+    font-family: "Press Start 2P", monospace;
+    font-size: 13px;
+    color: var(--ink);
+    text-shadow: 2px 2px 0 var(--ground-deep);
+  }
+  .readout .val.fire { color: var(--ember); text-shadow: 2px 2px 0 var(--ground-deep); }
+  .readout .lbl {
+    font-size: 9px;
+    letter-spacing: 2px;
+    color: var(--ink-dim);
+    text-transform: uppercase;
+  }
+
+  /* ============================ LAYOUT ============================ */
+  .stage {
+    display: grid;
+    grid-template-columns: 1fr 340px;
+    gap: calc(var(--px) * 6);
+    align-items: start;
+  }
+  @media (max-width: 880px) {
+    .stage { grid-template-columns: 1fr; }
+  }
+
+  /* ---- canvas aperture: stone ring + leaking warm dither glow ---- */
+  .aperture {
+    position: relative;
+    padding: calc(var(--px) * 4);
+    background-color: var(--stone);
+  }
+  /* warm firelight leak onto the frame — concentric hard dither rings */
+  .aperture::before {
+    content: "";
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+    z-index: 0;
+    background-color: transparent;
+    background-image:
+      linear-gradient(45deg, rgba(255,110,30,0.14) 25%, transparent 25% 75%, rgba(255,110,30,0.14) 75%),
+      linear-gradient(45deg, rgba(255,110,30,0.14) 25%, transparent 25% 75%, rgba(255,110,30,0.14) 75%);
+    background-size: 8px 8px;
+    background-position: 0 0, 4px 4px;
+    /* hard step mask so glow only lives near the aperture rim */
+    -webkit-mask-image: radial-gradient(ellipse 100% 100% at 50% 100%,
+      black 0, black 30%, rgba(0,0,0,0.5) 30%, rgba(0,0,0,0.5) 55%, transparent 55%);
+            mask-image: radial-gradient(ellipse 100% 100% at 50% 100%,
+      black 0, black 30%, rgba(0,0,0,0.5) 30%, rgba(0,0,0,0.5) 55%, transparent 55%);
+  }
+  .aperture-inner {
+    position: relative;
+    z-index: 1;
+    background-color: #000;
+    padding: 2px;
+  }
+
+  #sim {
+    display: block;
+    width: 100%;
+    max-width: 700px;
+    aspect-ratio: 4 / 3;
+    image-rendering: pixelated;
+    image-rendering: crisp-edges;
+    margin: 0 auto;
+  }
+
+  /* corner bracket pieces carved into the aperture */
+  .corner {
+    position: absolute;
+    width: 16px;
+    height: 16px;
+    z-index: 2;
+    fill: var(--lava-dim);
+  }
+  .corner.tl { top: 2px; left: 2px; }
+  .corner.tr { top: 2px; right: 2px; transform: scaleX(-1); }
+  .corner.bl { bottom: 2px; left: 2px; transform: scaleY(-1); }
+  .corner.br { bottom: 2px; right: 2px; transform: scale(-1,-1); }
+
+  /* ============================ PANELS ============================ */
+  .panel {
+    position: relative;
+    padding: calc(var(--px) * 4);
+  }
+  .panel + .panel { margin-top: calc(var(--px) * 6); }
+
+  .panel-title {
+    font-family: "Press Start 2P", monospace;
+    font-size: 10px;
+    letter-spacing: 1px;
+    color: var(--lava);
+    margin: 0 0 calc(var(--px) * 3) 0;
+    padding-bottom: calc(var(--px) * 2);
+    text-shadow: 1px 1px 0 var(--ground-deep);
+    border-bottom: 2px solid var(--stone-dark);
+    display: flex;
+    align-items: center;
+    gap: calc(var(--px) * 2);
+  }
+  .panel-title svg { width: 16px; height: 16px; fill: var(--lava); }
+
+  /* ---- palette ---- */
+  .cat { margin-bottom: calc(var(--px) * 4); }
+  .cat:last-child { margin-bottom: 0; }
+  .cat-label {
+    font-size: 10px;
+    letter-spacing: 3px;
+    text-transform: uppercase;
+    color: var(--ink-dim);
+    margin-bottom: calc(var(--px) * 2);
+    padding-left: 2px;
+    /* carved rune underline: dashed hard pixels */
+    display: flex;
+    align-items: center;
+    gap: calc(var(--px) * 2);
+  }
+  .cat-label::after {
+    content: "";
+    flex: 1;
+    height: 2px;
+    background-image: repeating-linear-gradient(
+      to right, var(--rune-grid) 0 4px, transparent 4px 8px);
+  }
+
+  .swatch-grid {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: calc(var(--px) * 2);
+  }
+
+  /* material slot carved into stone */
+  .mat {
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: calc(var(--px) * 1);
+    padding: calc(var(--px) * 2) calc(var(--px) * 1) calc(var(--px) * 1);
+    background-color: var(--slot);
+    cursor: pointer;
+    border: 0;
+    font-family: "Silkscreen", monospace;
+    box-shadow:
+      inset 1px 1px 0 0 var(--stone-dark),
+      inset -1px -1px 0 0 var(--stone-lit);
+  }
+  .mat .tile {
+    width: 24px;
+    height: 24px;
+    image-rendering: pixelated;
+    /* textured material tile, set into a dark stone slot */
+    box-shadow:
+      inset 1px 1px 0 0 rgba(255,255,255,0.18),
+      inset -1px -1px 0 0 rgba(0,0,0,0.45),
+      0 0 0 1px var(--ground-deep);
+  }
+  .mat .name {
+    font-size: 9px;
+    letter-spacing: 0.5px;
+    color: var(--ink-dim);
+    line-height: 1;
+  }
+  .mat .key {
+    position: absolute;
+    top: 2px;
+    right: 2px;
+    font-family: "Press Start 2P", monospace;
+    font-size: 7px;
+    color: var(--ink-faint);
+    line-height: 1;
+  }
+  .mat:hover .name { color: var(--ink); }
+  .mat:hover { background-color: var(--stone-face); }
+
+  /* ACTIVE = Lava: glowing pixel frame, concentric hard dither rings */
+  .mat.active {
+    background-color: var(--slot);
+    box-shadow:
+      inset 1px 1px 0 0 var(--stone-dark),
+      inset -1px -1px 0 0 var(--stone-lit),
+      0 0 0 2px var(--lava),
+      0 0 0 4px var(--lava-dim);
+  }
+  .mat.active .name { color: var(--ember); }
+  .mat.active .key { color: var(--lava); }
+  /* emissive halo: two concentric dither rings behind the active slot */
+  .mat.active::before {
+    content: "";
+    position: absolute;
+    inset: -10px;
+    z-index: -1;
+    background-color: transparent;
+    background-image:
+      linear-gradient(45deg, rgba(255,110,30,0.30) 25%, transparent 25% 75%, rgba(255,110,30,0.30) 75%),
+      linear-gradient(45deg, rgba(255,110,30,0.30) 25%, transparent 25% 75%, rgba(255,110,30,0.30) 75%);
+    background-size: 4px 4px;
+    background-position: 0 0, 2px 2px;
+    -webkit-mask-image: radial-gradient(closest-side,
+      black 0, black 40%, rgba(0,0,0,0.5) 40%, rgba(0,0,0,0.5) 70%, transparent 70%);
+            mask-image: radial-gradient(closest-side,
+      black 0, black 40%, rgba(0,0,0,0.5) 40%, rgba(0,0,0,0.5) 70%, transparent 70%);
+  }
+
+  /* ---- controls ---- */
+  .ctrl-row {
+    display: flex;
+    gap: calc(var(--px) * 2);
+    margin-bottom: calc(var(--px) * 3);
+  }
+  .btn {
+    flex: 1;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: calc(var(--px) * 2);
+    padding: calc(var(--px) * 2) calc(var(--px) * 2);
+    background-color: var(--stone-face);
+    color: var(--ink);
+    border: 0;
+    cursor: pointer;
+    font-family: "Silkscreen", monospace;
+    font-size: 10px;
+    letter-spacing: 1px;
+    text-transform: uppercase;
+    /* carved stone button bevel — hard pixel highlights */
+    box-shadow:
+      inset 2px 2px 0 0 var(--stone-lit),
+      inset -2px -2px 0 0 var(--stone-dark);
+  }
+  .btn svg { width: 16px; height: 16px; fill: currentColor; }
+  .btn:hover { background-color: var(--stone); color: #fff; }
+  .btn:active {
+    box-shadow:
+      inset 2px 2px 0 0 var(--stone-dark),
+      inset -2px -2px 0 0 var(--stone-lit);
+  }
+  .btn.primary {
+    background-color: var(--lava-dim);
+    color: #fff;
+    box-shadow:
+      inset 2px 2px 0 0 var(--ember),
+      inset -2px -2px 0 0 #7a3008,
+      0 0 0 2px var(--lava);
+  }
+  .btn.primary svg { fill: #fff; }
+
+  /* ---- rune-notched meters (sliders) ---- */
+  .meter { margin-bottom: calc(var(--px) * 3); }
+  .meter:last-child { margin-bottom: 0; }
+  .meter-head {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    margin-bottom: calc(var(--px) * 2);
+  }
+  .meter-head .m-lbl {
+    font-size: 10px;
+    letter-spacing: 2px;
+    text-transform: uppercase;
+    color: var(--ink-dim);
+  }
+  .meter-head .m-val {
+    font-family: "Press Start 2P", monospace;
+    font-size: 11px;
+    color: var(--ember);
+    text-shadow: 1px 1px 0 var(--ground-deep);
+  }
+  /* the track: a carved channel; notches drawn as hard repeating gradient */
+  .track {
+    position: relative;
+    height: 16px;
+    background-color: var(--slot);
+    box-shadow:
+      inset 1px 1px 0 0 var(--stone-dark),
+      inset -1px -1px 0 0 var(--stone-lit);
+    /* rune notches */
+    background-image: repeating-linear-gradient(
+      to right,
+      var(--rune-grid) 0 1px,
+      transparent 1px 8px);
+  }
+  /* filled portion = firelit pixel run */
+  .fill {
+    position: absolute;
+    top: 0; left: 0; bottom: 0;
+    background-color: var(--lava-dim);
+    background-image: repeating-linear-gradient(
+      to right,
+      var(--lava) 0 2px,
+      var(--lava-dim) 2px 4px);
+    box-shadow: inset 0 1px 0 0 var(--ember);
+  }
+  /* the rune knob */
+  .knob {
+    position: absolute;
+    top: -2px;
+    width: 12px;
+    height: 20px;
+    background-color: var(--ember);
+    transform: translateX(-6px);
+    box-shadow:
+      inset 1px 1px 0 0 #ffd9a0,
+      inset -1px -1px 0 0 #7a3008,
+      0 0 0 2px var(--ground-deep);
+  }
+  .meter.disabled { opacity: 0.4; }
+  .meter.disabled .fill {
+    background-image: repeating-linear-gradient(
+      to right, #4a4a4f 0 2px, #2c2c30 2px 4px);
+    background-color: #2c2c30;
+    box-shadow: none;
+  }
+  .meter.disabled .m-val { color: var(--ink-faint); }
+  .meter.disabled .knob {
+    background-color: #5a5a60;
+    box-shadow:
+      inset 1px 1px 0 0 #7a7a80,
+      inset -1px -1px 0 0 #303034,
+      0 0 0 2px var(--ground-deep);
+  }
+
+  /* ---- sigil toggles (Glow / Light) ---- */
+  .toggles {
+    display: flex;
+    gap: calc(var(--px) * 3);
+    margin-bottom: calc(var(--px) * 3);
+  }
+  .sigil {
+    flex: 1;
+    display: flex;
+    align-items: center;
+    gap: calc(var(--px) * 2);
+    padding: calc(var(--px) * 2) calc(var(--px) * 3);
+    background-color: var(--slot);
+    cursor: pointer;
+    border: 0;
+    font-family: "Silkscreen", monospace;
+    box-shadow:
+      inset 1px 1px 0 0 var(--stone-dark),
+      inset -1px -1px 0 0 var(--stone-lit);
+  }
+  .sigil .glyph {
+    width: 20px; height: 20px;
+    flex: 0 0 auto;
+    display: grid;
+    place-items: center;
+  }
+  .sigil .glyph svg { width: 16px; height: 16px; }
+  .sigil .stack { display: flex; flex-direction: column; gap: 1px; line-height: 1; }
+  .sigil .s-name { font-size: 9px; letter-spacing: 1px; color: var(--ink-dim); text-transform: uppercase; }
+  .sigil .s-state { font-family: "Press Start 2P", monospace; font-size: 9px; }
+
+  /* lit sigil (Glow ON) — emissive dither halo */
+  .sigil.on { position: relative; }
+  .sigil.on .glyph svg { fill: var(--ember); }
+  .sigil.on .s-state { color: var(--ember); text-shadow: 1px 1px 0 var(--ground-deep); }
+  .sigil.on .s-name { color: var(--ink); }
+  .sigil.on::after {
+    content: "";
+    position: absolute;
+    left: calc(var(--px) * 2);
+    top: 50%;
+    width: 28px; height: 28px;
+    transform: translateY(-50%);
+    z-index: -1;
+    background-image:
+      linear-gradient(45deg, rgba(255,150,40,0.28) 25%, transparent 25% 75%, rgba(255,150,40,0.28) 75%),
+      linear-gradient(45deg, rgba(255,150,40,0.28) 25%, transparent 25% 75%, rgba(255,150,40,0.28) 75%);
+    background-size: 4px 4px;
+    background-position: 0 0, 2px 2px;
+    -webkit-mask-image: radial-gradient(closest-side, black 0, black 45%, rgba(0,0,0,0.5) 45%, rgba(0,0,0,0.5) 75%, transparent 75%);
+            mask-image: radial-gradient(closest-side, black 0, black 45%, rgba(0,0,0,0.5) 45%, rgba(0,0,0,0.5) 75%, transparent 75%);
+  }
+  /* dark sigil (Light OFF) */
+  .sigil.off .glyph svg { fill: var(--ink-faint); }
+  .sigil.off .s-state { color: var(--ink-faint); }
+  .sigil.off .s-name { color: var(--ink-dim); }
+
+  footer.foot {
+    text-align: center;
+    font-size: 9px;
+    letter-spacing: 2px;
+    color: var(--ink-faint);
+    padding: calc(var(--px) * 3);
+  }
+</style>
+</head>
+<body>
+  <div class="wrap">
+
+    <!-- ===================== HEADER ===================== -->
+    <header class="bar dither-stone bevel">
+      <div class="wordmark">
+        <!-- hand-pixeled alchemical crest (16x16) -->
+        <svg class="crest" viewBox="0 0 16 16" shape-rendering="crispEdges" aria-hidden="true">
+          <rect x="7" y="1" width="2" height="2"/>
+          <rect x="5" y="3" width="6" height="1"/>
+          <rect x="4" y="4" width="1" height="3"/>
+          <rect x="11" y="4" width="1" height="3"/>
+          <rect x="6" y="6" width="4" height="1"/>
+          <rect x="5" y="7" width="6" height="4"/>
+          <rect x="6" y="11" width="4" height="1"/>
+          <rect x="7" y="12" width="2" height="2"/>
+          <rect x="6" y="14" width="4" height="1"/>
+        </svg>
+        <div>
+          <h1>POWDER LAB</h1>
+          <span class="sub">CANDLE-LIT CAVE SANDBOX</span>
+        </div>
+      </div>
+
+      <div class="hud">
+        <div class="readout bevel-in">
+          <span class="val fire">59</span>
+          <span class="lbl">fps</span>
+        </div>
+        <div class="readout bevel-in">
+          <span class="val">12,403</span>
+          <span class="lbl">particles</span>
+        </div>
+      </div>
+    </header>
+
+    <!-- ===================== STAGE ===================== -->
+    <div class="stage">
+
+      <!-- canvas aperture -->
+      <section>
+        <div class="aperture dither-stone bevel">
+          <!-- carved corner brackets -->
+          <svg class="corner tl" viewBox="0 0 8 8" shape-rendering="crispEdges" aria-hidden="true"><rect x="0" y="0" width="6" height="1"/><rect x="0" y="1" width="1" height="5"/><rect x="2" y="2" width="2" height="1"/><rect x="2" y="3" width="1" height="1"/></svg>
+          <svg class="corner tr" viewBox="0 0 8 8" shape-rendering="crispEdges" aria-hidden="true"><rect x="0" y="0" width="6" height="1"/><rect x="0" y="1" width="1" height="5"/><rect x="2" y="2" width="2" height="1"/><rect x="2" y="3" width="1" height="1"/></svg>
+          <svg class="corner bl" viewBox="0 0 8 8" shape-rendering="crispEdges" aria-hidden="true"><rect x="0" y="0" width="6" height="1"/><rect x="0" y="1" width="1" height="5"/><rect x="2" y="2" width="2" height="1"/><rect x="2" y="3" width="1" height="1"/></svg>
+          <svg class="corner br" viewBox="0 0 8 8" shape-rendering="crispEdges" aria-hidden="true"><rect x="0" y="0" width="6" height="1"/><rect x="0" y="1" width="1" height="5"/><rect x="2" y="2" width="2" height="1"/><rect x="2" y="3" width="1" height="1"/></svg>
+
+          <div class="aperture-inner">
+            <canvas id="sim"></canvas>
+          </div>
+        </div>
+
+        <!-- hint line under the aperture -->
+        <p style="margin: calc(var(--px) * 3) 0 0; font-size: 10px; letter-spacing: 1px; color: var(--ink-dim); text-align: center;">
+          drag to draw &middot; right-click to erase &middot; space = pause
+        </p>
+      </section>
+
+      <!-- right rail: palette + controls -->
+      <aside>
+
+        <!-- ----------- PALETTE PANEL ----------- -->
+        <div class="panel dither-stone bevel">
+          <h2 class="panel-title">
+            <svg viewBox="0 0 8 8" shape-rendering="crispEdges" aria-hidden="true"><rect x="1" y="1" width="2" height="2"/><rect x="5" y="1" width="2" height="2"/><rect x="1" y="5" width="2" height="2"/><rect x="5" y="5" width="2" height="2"/></svg>
+            MATERIALS
+          </h2>
+
+          <!-- TOOLS -->
+          <div class="cat">
+            <div class="cat-label">Tools</div>
+            <div class="swatch-grid">
+              <button class="mat" type="button">
+                <span class="key">E</span>
+                <!-- eraser tile: pixel hatch on dark -->
+                <span class="tile" style="background-color: rgb(30,33,38); background-image: linear-gradient(45deg, rgba(255,255,255,0.10) 25%, transparent 25% 75%, rgba(255,255,255,0.10) 75%); background-size:4px 4px; image-rendering:pixelated;"></span>
+                <span class="name">Eraser</span>
+              </button>
+              <button class="mat" type="button">
+                <span class="key">W</span>
+                <span class="tile" style="background-color: rgb(120,122,130); background-image: repeating-linear-gradient(to right, rgba(0,0,0,0.25) 0 1px, transparent 1px 4px), repeating-linear-gradient(to bottom, rgba(0,0,0,0.25) 0 1px, transparent 1px 4px); background-size:4px 4px;"></span>
+                <span class="name">Wall</span>
+              </button>
+            </div>
+          </div>
+
+          <!-- POWDERS -->
+          <div class="cat">
+            <div class="cat-label">Powders</div>
+            <div class="swatch-grid">
+              <button class="mat" type="button">
+                <span class="key">1</span>
+                <span class="tile" style="background-color: rgb(196,180,120); background-image: linear-gradient(45deg, rgba(0,0,0,0.18) 25%, transparent 25% 75%, rgba(0,0,0,0.18) 75%), linear-gradient(45deg, rgba(255,255,255,0.12) 25%, transparent 25% 75%, rgba(255,255,255,0.12) 75%); background-size:2px 2px,4px 4px; background-position:0 0,1px 1px;"></span>
+                <span class="name">Sand</span>
+              </button>
+              <button class="mat" type="button">
+                <span class="key">2</span>
+                <span class="tile" style="background-color: rgb(70,68,78); background-image: linear-gradient(45deg, rgba(0,0,0,0.4) 25%, transparent 25% 75%, rgba(0,0,0,0.4) 75%), linear-gradient(45deg, rgba(120,118,128,0.5) 25%, transparent 25% 75%, rgba(120,118,128,0.5) 75%); background-size:2px 2px; background-position:0 0,1px 1px;"></span>
+                <span class="name">Gunpowder</span>
+              </button>
+            </div>
+          </div>
+
+          <!-- LIQUIDS -->
+          <div class="cat">
+            <div class="cat-label">Liquids</div>
+            <div class="swatch-grid">
+              <button class="mat" type="button">
+                <span class="key">3</span>
+                <span class="tile" style="background-color: rgb(54,108,200); background-image: repeating-linear-gradient(to bottom, rgba(255,255,255,0.14) 0 1px, transparent 1px 4px), repeating-linear-gradient(to bottom, rgba(0,0,0,0.20) 2px 3px, transparent 3px 4px); background-size:4px 4px;"></span>
+                <span class="name">Water</span>
+              </button>
+              <button class="mat" type="button">
+                <span class="key">4</span>
+                <span class="tile" style="background-color: rgb(78,66,44); background-image: repeating-linear-gradient(to bottom, rgba(255,200,120,0.12) 0 1px, transparent 1px 4px); background-size:4px 4px;"></span>
+                <span class="name">Oil</span>
+              </button>
+              <button class="mat" type="button">
+                <span class="key">5</span>
+                <span class="tile" style="background-color: rgb(120,214,70); background-image: linear-gradient(45deg, rgba(255,255,255,0.18) 25%, transparent 25% 75%, rgba(255,255,255,0.18) 75%); background-size:2px 2px;"></span>
+                <span class="name">Acid</span>
+              </button>
+
+              <!-- ACTIVE: LAVA -->
+              <button class="mat active" type="button" aria-current="true">
+                <span class="key">6</span>
+                <span class="tile" style="background-color: rgb(255,110,30); background-image: linear-gradient(45deg, rgba(255,210,90,0.7) 25%, transparent 25% 75%, rgba(255,210,90,0.7) 75%), linear-gradient(45deg, rgba(160,40,0,0.6) 25%, transparent 25% 75%, rgba(160,40,0,0.6) 75%); background-size:4px 4px; background-position:0 0,2px 2px;"></span>
+                <span class="name">Lava</span>
+              </button>
+            </div>
+          </div>
+
+          <!-- SOLIDS -->
+          <div class="cat">
+            <div class="cat-label">Solids</div>
+            <div class="swatch-grid">
+              <button class="mat" type="button">
+                <span class="key">7</span>
+                <span class="tile" style="background-color: rgb(98,98,106); background-image: linear-gradient(45deg, rgba(0,0,0,0.25) 25%, transparent 25% 75%, rgba(0,0,0,0.25) 75%), linear-gradient(45deg, rgba(255,255,255,0.10) 25%, transparent 25% 75%, rgba(255,255,255,0.10) 75%); background-size:4px 4px,2px 2px; background-position:0 0,1px 1px;"></span>
+                <span class="name">Stone</span>
+              </button>
+              <button class="mat" type="button">
+                <span class="key">8</span>
+                <span class="tile" style="background-color: rgb(112,74,42); background-image: repeating-linear-gradient(to right, rgba(0,0,0,0.22) 0 1px, transparent 1px 3px); background-size:4px 4px;"></span>
+                <span class="name">Wood</span>
+              </button>
+              <button class="mat" type="button">
+                <span class="key">9</span>
+                <span class="tile" style="background-color: rgb(46,160,60); background-image: linear-gradient(45deg, rgba(0,0,0,0.20) 25%, transparent 25% 75%, rgba(0,0,0,0.20) 75%), linear-gradient(45deg, rgba(140,255,150,0.18) 25%, transparent 25% 75%, rgba(140,255,150,0.18) 75%); background-size:2px 2px; background-position:0 0,1px 1px;"></span>
+                <span class="name">Plant</span>
+              </button>
+              <button class="mat" type="button">
+                <span class="key">0</span>
+                <span class="tile" style="background-color: rgb(170,210,235); background-image: linear-gradient(45deg, rgba(255,255,255,0.35) 25%, transparent 25% 75%, rgba(255,255,255,0.35) 75%); background-size:4px 4px;"></span>
+                <span class="name">Ice</span>
+              </button>
+            </div>
+          </div>
+
+          <!-- ENERGY -->
+          <div class="cat">
+            <div class="cat-label">Energy</div>
+            <div class="swatch-grid">
+              <button class="mat" type="button">
+                <span class="key">F</span>
+                <span class="tile" style="background-color: rgb(255,150,40); background-image: linear-gradient(45deg, rgba(255,230,120,0.7) 25%, transparent 25% 75%, rgba(255,230,120,0.7) 75%), linear-gradient(45deg, rgba(200,40,0,0.5) 25%, transparent 25% 75%, rgba(200,40,0,0.5) 75%); background-size:2px 2px; background-position:0 0,1px 1px;"></span>
+                <span class="name">Fire</span>
+              </button>
+              <button class="mat" type="button">
+                <span class="key">S</span>
+                <span class="tile" style="background-color: rgb(90,90,96); background-image: linear-gradient(45deg, rgba(255,255,255,0.10) 25%, transparent 25% 75%, rgba(255,255,255,0.10) 75%); background-size:4px 4px;"></span>
+                <span class="name">Smoke</span>
+              </button>
+              <button class="mat" type="button">
+                <span class="key">T</span>
+                <span class="tile" style="background-color: rgb(205,210,220); background-image: linear-gradient(45deg, rgba(255,255,255,0.25) 25%, transparent 25% 75%, rgba(255,255,255,0.25) 75%); background-size:4px 4px;"></span>
+                <span class="name">Steam</span>
+              </button>
+            </div>
+          </div>
+        </div>
+
+        <!-- ----------- CONTROLS PANEL ----------- -->
+        <div class="panel dither-stone bevel">
+          <h2 class="panel-title">
+            <svg viewBox="0 0 8 8" shape-rendering="crispEdges" aria-hidden="true"><rect x="3" y="0" width="2" height="2"/><rect x="3" y="6" width="2" height="2"/><rect x="0" y="3" width="2" height="2"/><rect x="6" y="3" width="2" height="2"/><rect x="3" y="3" width="2" height="2"/></svg>
+            CONTROLS
+          </h2>
+
+          <div class="ctrl-row">
+            <button class="btn primary" type="button">
+              <!-- pause glyph (sim is running) 8x8 -->
+              <svg viewBox="0 0 8 8" shape-rendering="crispEdges" aria-hidden="true"><rect x="2" y="1" width="2" height="6"/><rect x="5" y="1" width="2" height="6"/></svg>
+              Pause
+            </button>
+            <button class="btn" type="button">
+              <!-- step glyph: play + bar 8x8 -->
+              <svg viewBox="0 0 8 8" shape-rendering="crispEdges" aria-hidden="true"><rect x="1" y="1" width="1" height="6"/><rect x="2" y="2" width="1" height="4"/><rect x="3" y="3" width="1" height="2"/><rect x="5" y="1" width="2" height="6"/></svg>
+              Step
+            </button>
+            <button class="btn" type="button">
+              <!-- clear glyph: X / trash 8x8 -->
+              <svg viewBox="0 0 8 8" shape-rendering="crispEdges" aria-hidden="true"><rect x="1" y="1" width="1" height="1"/><rect x="2" y="2" width="1" height="1"/><rect x="3" y="3" width="2" height="2"/><rect x="5" y="2" width="1" height="1"/><rect x="6" y="1" width="1" height="1"/><rect x="1" y="6" width="1" height="1"/><rect x="2" y="5" width="1" height="1"/><rect x="5" y="5" width="1" height="1"/><rect x="6" y="6" width="1" height="1"/></svg>
+              Clear
+            </button>
+          </div>
+
+          <!-- BRUSH meter -->
+          <div class="meter">
+            <div class="meter-head">
+              <span class="m-lbl">
+                <!-- brush glyph inline (kept small) -->
+                Brush
+              </span>
+              <span class="m-val">18</span>
+            </div>
+            <div class="track" role="slider" aria-label="brush size" aria-valuemin="1" aria-valuemax="40" aria-valuenow="18">
+              <!-- 18 of 40 ≈ 44% -->
+              <div class="fill" style="width: 44%;"></div>
+              <div class="knob" style="left: 44%;"></div>
+            </div>
+          </div>
+
+          <!-- SPEED meter -->
+          <div class="meter">
+            <div class="meter-head">
+              <span class="m-lbl">Speed</span>
+              <span class="m-val">2&times;</span>
+            </div>
+            <div class="track" role="slider" aria-label="speed" aria-valuemin="1" aria-valuemax="6" aria-valuenow="2">
+              <!-- 2 of 6 ≈ 33% -->
+              <div class="fill" style="width: 33%;"></div>
+              <div class="knob" style="left: 33%;"></div>
+            </div>
+          </div>
+
+          <!-- SIGIL TOGGLES -->
+          <div class="toggles">
+            <button class="sigil on" type="button" aria-pressed="true">
+              <span class="glyph">
+                <!-- glow sigil: radiant star 8x8 -->
+                <svg viewBox="0 0 8 8" shape-rendering="crispEdges" aria-hidden="true"><rect x="3" y="0" width="2" height="2"/><rect x="3" y="6" width="2" height="2"/><rect x="0" y="3" width="2" height="2"/><rect x="6" y="3" width="2" height="2"/><rect x="2" y="2" width="4" height="4"/></svg>
+              </span>
+              <span class="stack">
+                <span class="s-name">Glow</span>
+                <span class="s-state">ON</span>
+              </span>
+            </button>
+
+            <button class="sigil off" type="button" aria-pressed="false">
+              <span class="glyph">
+                <!-- light sigil: lamp/sun 8x8 -->
+                <svg viewBox="0 0 8 8" shape-rendering="crispEdges" aria-hidden="true"><rect x="3" y="1" width="2" height="1"/><rect x="2" y="2" width="4" height="3"/><rect x="3" y="5" width="2" height="1"/><rect x="3" y="6" width="2" height="1"/></svg>
+              </span>
+              <span class="stack">
+                <span class="s-name">Light</span>
+                <span class="s-state">OFF</span>
+              </span>
+            </button>
+          </div>
+
+          <!-- DARKNESS meter (disabled because Light is off) -->
+          <div class="meter disabled">
+            <div class="meter-head">
+              <span class="m-lbl">Darkness</span>
+              <span class="m-val">0</span>
+            </div>
+            <div class="track" role="slider" aria-label="darkness" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0" aria-disabled="true">
+              <div class="fill" style="width: 0%;"></div>
+              <div class="knob" style="left: 0%;"></div>
+            </div>
+          </div>
+        </div>
+
+      </aside>
+    </div>
+
+    <footer class="foot">— forged in the deep · powder lab —</footer>
+  </div>
+
+  <script src="sand.js"></script>
+  <script>mountSand(document.getElementById('sim'));</script>
+</body>
+</html>

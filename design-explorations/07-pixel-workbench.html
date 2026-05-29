@@ -1,0 +1,726 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Powder Lab — Pixel Workbench</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&family=Silkscreen:wght@400;700&family=Jetbrains+Mono:wght@400;600&display=swap" rel="stylesheet" />
+<style>
+  /* ===========================================================
+     PIXEL WORKBENCH — lineage: Aseprite / Deluxe Paint / GrafX2
+     Every dimension is an integer multiple of --px (4px).
+     No blur. No soft shadows. No gradients-as-fades. No round corners.
+     =========================================================== */
+
+  :root {
+    --px: 4px;
+
+    /* warm-dark neutral ramp (OKLCH) */
+    --ground:  oklch(0.20 0.012 60);
+    --panel:   oklch(0.24 0.012 60);
+    --raised:  oklch(0.285 0.013 60);
+    --raised-2:oklch(0.32 0.013 60);
+    --hairline:oklch(0.34 0.014 60);
+    --text:    oklch(0.90 0.012 85);
+    --muted:   oklch(0.66 0.012 75);
+    --dim:     oklch(0.46 0.012 70);
+
+    /* accent = selected material: Lava orange */
+    --accent:  rgb(255,110,30);
+    --accent-dk: rgb(150,58,12);
+    --accent-lt: rgb(255,170,90);
+
+    /* material colors (UI color language) */
+    --m-eraser: rgb(30,33,38);
+    --m-wall:   rgb(120,122,130);
+    --m-sand:   rgb(196,180,120);
+    --m-gunpwd: rgb(70,68,78);
+    --m-water:  rgb(54,108,200);
+    --m-oil:    rgb(78,66,44);
+    --m-acid:   rgb(120,214,70);
+    --m-lava:   rgb(255,110,30);
+    --m-stone:  rgb(98,98,106);
+    --m-wood:   rgb(112,74,42);
+    --m-plant:  rgb(46,160,60);
+    --m-ice:    rgb(170,210,235);
+    --m-fire:   rgb(255,150,40);
+    --m-smoke:  rgb(90,90,96);
+    --m-steam:  rgb(205,210,220);
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  html, body {
+    background: var(--ground);
+    color: var(--text);
+    font-family: 'Jetbrains Mono', monospace;
+    /* subtle warm checker on the dead ground, very dark */
+    background-color: var(--ground);
+    background-image:
+      linear-gradient(45deg, oklch(0.18 0.012 60) 25%, transparent 25% 75%, oklch(0.18 0.012 60) 75%),
+      linear-gradient(45deg, oklch(0.18 0.012 60) 25%, transparent 25% 75%, oklch(0.18 0.012 60) 75%);
+    background-size: 8px 8px;
+    background-position: 0 0, 4px 4px;
+    -webkit-font-smoothing: none;
+    image-rendering: pixelated;
+  }
+
+  body {
+    min-height: 100vh;
+    display: flex;
+    align-items: flex-start;
+    justify-content: center;
+    padding: calc(var(--px) * 6);
+  }
+
+  .pixel-text {
+    font-family: 'Silkscreen', monospace;
+    letter-spacing: 0.5px;
+  }
+
+  /* ---------- the application window ---------- */
+  .app {
+    width: 100%;
+    max-width: 992px;            /* 248 * 4 */
+    background: var(--panel);
+    border: var(--px) solid var(--hairline);
+    /* hard pixel drop shadow */
+    box-shadow: calc(var(--px) * 2) calc(var(--px) * 2) 0 oklch(0.12 0.01 60);
+  }
+
+  /* ---------- titlebar ---------- */
+  .titlebar {
+    display: flex;
+    align-items: center;
+    gap: calc(var(--px) * 2);
+    height: calc(var(--px) * 8);
+    padding: 0 calc(var(--px) * 3);
+    background: var(--raised);
+    border-bottom: var(--px) solid var(--hairline);
+  }
+  .titlebar .wordmark {
+    font-family: 'Press Start 2P', monospace;
+    font-size: 11px;
+    color: var(--text);
+    text-shadow: 2px 2px 0 var(--accent-dk);
+    line-height: 1;
+    flex: 1;
+  }
+  .titlebar .wordmark b { color: var(--accent); }
+  .winctl {
+    display: flex;
+    gap: var(--px);
+  }
+  .winctl button {
+    width: calc(var(--px) * 4);
+    height: calc(var(--px) * 4);
+    background: var(--raised-2);
+    border: 1px solid var(--hairline);
+    border-radius: 0;
+    cursor: pointer;
+    display: grid;
+    place-items: center;
+    color: var(--muted);
+    padding: 0;
+  }
+  .winctl button:hover { background: var(--accent-dk); color: var(--text); }
+
+  /* ---------- body grid: rail | canvas ---------- */
+  .workspace {
+    display: grid;
+    grid-template-columns: calc(var(--px) * 56) 1fr;
+    gap: 0;
+  }
+  @media (max-width: 760px) {
+    .workspace { grid-template-columns: 1fr; }
+  }
+
+  /* ---------- left rail ---------- */
+  .rail {
+    background: var(--panel);
+    border-right: var(--px) solid var(--hairline);
+    padding: calc(var(--px) * 3);
+    display: flex;
+    flex-direction: column;
+    gap: calc(var(--px) * 4);
+  }
+
+  .group { display: flex; flex-direction: column; gap: calc(var(--px) * 2); }
+  .group > .ghead {
+    font-family: 'Silkscreen', monospace;
+    font-size: 9px;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    color: var(--muted);
+    display: flex;
+    align-items: center;
+    gap: var(--px);
+  }
+  .group > .ghead::after {
+    content: "";
+    flex: 1;
+    height: 1px;
+    background: var(--hairline);
+  }
+
+  .swatch-grid {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: calc(var(--px) * 2);
+  }
+
+  /* a textured material tile */
+  .tile {
+    position: relative;
+    display: flex;
+    align-items: center;
+    gap: calc(var(--px) * 2);
+    padding: calc(var(--px) * 1);
+    background: var(--raised);
+    border: 1px solid var(--hairline);
+    border-radius: 0;
+    cursor: pointer;
+    /* 1px inset top-left highlight */
+    box-shadow: inset 1px 1px 0 oklch(0.36 0.013 60);
+  }
+  .tile:hover { background: var(--raised-2); }
+
+  .tile .chip {
+    width: calc(var(--px) * 4);
+    height: calc(var(--px) * 4);
+    flex: 0 0 auto;
+    border: 1px solid oklch(0.15 0.01 60);
+    image-rendering: pixelated;
+    /* 1px pixel inset highlight on the tile */
+    box-shadow: inset 1px 1px 0 rgba(255,255,255,0.18);
+  }
+  .tile .meta {
+    display: flex;
+    flex-direction: column;
+    gap: 1px;
+    min-width: 0;
+    flex: 1;
+  }
+  .tile .mname {
+    font-family: 'Silkscreen', monospace;
+    font-size: 8px;
+    color: var(--text);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: clip;
+  }
+  kbd {
+    font-family: 'Silkscreen', monospace;
+    font-size: 7px;
+    color: var(--muted);
+    background: var(--ground);
+    border: 1px solid var(--hairline);
+    padding: 1px 3px;
+    align-self: flex-start;
+    line-height: 1;
+    box-shadow: 1px 1px 0 oklch(0.16 0.01 60);
+  }
+
+  /* ACTIVE tile (Lava) — pixel selection marquee: 1px light + 1px dark */
+  .tile.active {
+    background: var(--accent-dk);
+    border-color: var(--accent);
+    outline: 1px solid oklch(0.15 0.01 60);
+    outline-offset: 0;
+    box-shadow:
+      inset 0 0 0 1px var(--accent-lt),
+      2px 2px 0 oklch(0.12 0.01 60);
+  }
+  .tile.active .mname { color: var(--accent-lt); }
+  .tile.active kbd { color: var(--accent-lt); border-color: var(--accent); }
+
+  /* ---------- canvas stage ---------- */
+  .stage {
+    display: flex;
+    flex-direction: column;
+    background: var(--ground);
+    min-width: 0;
+  }
+  .stage-head {
+    display: flex;
+    align-items: center;
+    gap: calc(var(--px) * 3);
+    padding: calc(var(--px) * 2) calc(var(--px) * 3);
+    border-bottom: var(--px) solid var(--hairline);
+    background: var(--panel);
+    flex-wrap: wrap;
+  }
+  .hud {
+    display: flex;
+    align-items: center;
+    gap: calc(var(--px) * 2);
+    font-family: 'Silkscreen', monospace;
+    font-size: 9px;
+  }
+  .hud .stat {
+    background: var(--raised);
+    border: 1px solid var(--hairline);
+    padding: calc(var(--px) * 1) calc(var(--px) * 2);
+    color: var(--text);
+    box-shadow: 1px 1px 0 oklch(0.16 0.01 60);
+  }
+  .hud .stat b { color: var(--accent); }
+  .hud .stat.fps b { color: var(--m-acid); }
+  .hud .hint {
+    margin-left: auto;
+    color: var(--muted);
+    font-family: 'Jetbrains Mono', monospace;
+    font-size: 10px;
+    letter-spacing: 0;
+  }
+
+  /* the canvas mat: classic editor transparency checker */
+  .mat {
+    flex: 1;
+    padding: calc(var(--px) * 5);
+    display: grid;
+    place-items: center;
+    background-color: oklch(0.22 0.01 60);
+    background-image:
+      linear-gradient(45deg, oklch(0.27 0.01 60) 25%, transparent 25% 75%, oklch(0.27 0.01 60) 75%),
+      linear-gradient(45deg, oklch(0.27 0.01 60) 25%, transparent 25% 75%, oklch(0.27 0.01 60) 75%);
+    background-size: 16px 16px;
+    background-position: 0 0, 8px 8px;
+  }
+
+  .canvas-frame {
+    width: 100%;
+    max-width: 700px;
+    border: var(--px) solid var(--hairline);
+    /* hard pixel frame shadow */
+    box-shadow:
+      inset 1px 1px 0 oklch(0.42 0.014 60),
+      calc(var(--px) * 1) calc(var(--px) * 1) 0 oklch(0.12 0.01 60);
+    background: #000;
+    line-height: 0;
+  }
+  #sim {
+    display: block;
+    width: 100%;
+    max-width: 700px;
+    aspect-ratio: 4 / 3;
+    image-rendering: pixelated;
+    image-rendering: crisp-edges;
+  }
+
+  /* ---------- bottom toolbar ---------- */
+  .toolbar {
+    display: flex;
+    align-items: center;
+    gap: calc(var(--px) * 4);
+    padding: calc(var(--px) * 3);
+    background: var(--raised);
+    border-top: var(--px) solid var(--hairline);
+    flex-wrap: wrap;
+  }
+  .tool-cluster {
+    display: flex;
+    align-items: center;
+    gap: calc(var(--px) * 2);
+  }
+  .divider {
+    width: 1px;
+    align-self: stretch;
+    background: var(--hairline);
+    margin: 0 calc(var(--px) * 1);
+  }
+
+  /* pixel-icon buttons */
+  .btn {
+    display: inline-flex;
+    align-items: center;
+    gap: calc(var(--px) * 2);
+    height: calc(var(--px) * 8);
+    padding: 0 calc(var(--px) * 3);
+    background: var(--raised-2);
+    border: 1px solid var(--hairline);
+    border-radius: 0;
+    color: var(--text);
+    cursor: pointer;
+    font-family: 'Silkscreen', monospace;
+    font-size: 9px;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    box-shadow: inset 1px 1px 0 oklch(0.38 0.013 60), 2px 2px 0 oklch(0.14 0.01 60);
+  }
+  .btn:hover { background: oklch(0.35 0.013 60); }
+  .btn:active { box-shadow: inset 1px 1px 0 oklch(0.20 0.01 60); transform: translate(1px,1px); }
+  .btn svg { display: block; fill: currentColor; }
+
+  .btn.primary {
+    background: var(--accent);
+    color: oklch(0.18 0.02 50);
+    border-color: var(--accent-lt);
+    box-shadow: inset 1px 1px 0 var(--accent-lt), 2px 2px 0 var(--accent-dk);
+  }
+  .btn.primary:hover { background: var(--accent-lt); }
+  .btn.icon-only { padding: 0; width: calc(var(--px) * 8); justify-content: center; }
+
+  /* stepped / notched sliders */
+  .ctrl {
+    display: flex;
+    flex-direction: column;
+    gap: calc(var(--px) * 1);
+  }
+  .ctrl .clabel {
+    font-family: 'Silkscreen', monospace;
+    font-size: 8px;
+    color: var(--muted);
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    display: flex;
+    justify-content: space-between;
+    gap: calc(var(--px) * 2);
+  }
+  .ctrl .clabel b {
+    color: var(--accent);
+    font-family: 'Jetbrains Mono', monospace;
+    font-weight: 600;
+    font-size: 10px;
+  }
+
+  /* the slider track is a notched dither rail */
+  .slider {
+    position: relative;
+    width: calc(var(--px) * 32);
+    height: calc(var(--px) * 5);
+    background: var(--ground);
+    border: 1px solid var(--hairline);
+    /* notch ticks via hard-stop repeating gradient */
+    background-image:
+      repeating-linear-gradient(90deg,
+        transparent 0,
+        transparent calc(var(--px) * 2 - 1px),
+        var(--hairline) calc(var(--px) * 2 - 1px),
+        var(--hairline) calc(var(--px) * 2));
+    box-shadow: inset 1px 1px 0 oklch(0.16 0.01 60);
+  }
+  /* filled portion = accent dither, hard edge */
+  .slider .fill {
+    position: absolute;
+    top: 0; left: 0; bottom: 0;
+    background-color: var(--accent-dk);
+    background-image:
+      linear-gradient(45deg, var(--accent) 25%, transparent 25% 75%, var(--accent) 75%),
+      linear-gradient(45deg, var(--accent) 25%, transparent 25% 75%, var(--accent) 75%);
+    background-size: 4px 4px;
+    background-position: 0 0, 2px 2px;
+  }
+  .slider .thumb {
+    position: absolute;
+    top: -2px;
+    width: calc(var(--px) * 2);
+    height: calc(var(--px) * 5 + 4px);
+    background: var(--accent-lt);
+    border: 1px solid oklch(0.15 0.01 60);
+    box-shadow: inset 1px 1px 0 #fff, 1px 1px 0 oklch(0.14 0.01 60);
+  }
+
+  /* disabled control */
+  .ctrl.disabled { opacity: 0.4; filter: saturate(0.3); }
+  .ctrl.disabled .clabel b { color: var(--muted); }
+  .ctrl.disabled .slider .fill {
+    background-color: var(--dim);
+    background-image: none;
+  }
+  .ctrl.disabled .slider .thumb { background: var(--muted); box-shadow: none; }
+
+  /* pixel toggle switch */
+  .toggle {
+    display: flex;
+    flex-direction: column;
+    gap: calc(var(--px) * 1);
+  }
+  .toggle .clabel {
+    font-family: 'Silkscreen', monospace;
+    font-size: 8px;
+    color: var(--muted);
+    text-transform: uppercase;
+    letter-spacing: 1px;
+  }
+  .switch {
+    position: relative;
+    width: calc(var(--px) * 10);
+    height: calc(var(--px) * 5);
+    background: var(--ground);
+    border: 1px solid var(--hairline);
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    box-shadow: inset 1px 1px 0 oklch(0.16 0.01 60);
+  }
+  .switch .knob {
+    position: absolute;
+    top: 1px; left: 1px;
+    width: calc(var(--px) * 4);
+    height: calc(var(--px) * 4 + 2px);
+    background: var(--raised-2);
+    border: 1px solid var(--hairline);
+    box-shadow: inset 1px 1px 0 oklch(0.4 0.013 60);
+  }
+  .switch .stxt {
+    position: absolute;
+    right: calc(var(--px) * 1);
+    font-family: 'Silkscreen', monospace;
+    font-size: 7px;
+    color: var(--muted);
+  }
+  .switch.on {
+    background: var(--accent-dk);
+    border-color: var(--accent);
+  }
+  .switch.on .knob {
+    left: auto;
+    right: 1px;
+    /* lit pixel */
+    background: var(--accent);
+    border-color: var(--accent-lt);
+    box-shadow: inset 1px 1px 0 var(--accent-lt);
+  }
+  .switch.on .stxt {
+    right: auto;
+    left: calc(var(--px) * 1);
+    color: var(--accent-lt);
+  }
+
+  .controls-strip {
+    display: flex;
+    align-items: center;
+    gap: calc(var(--px) * 4);
+    flex-wrap: wrap;
+  }
+</style>
+</head>
+<body>
+  <div class="app">
+
+    <!-- ===== titlebar ===== -->
+    <div class="titlebar">
+      <span class="wordmark">POWDER&nbsp;<b>LAB</b></span>
+      <div class="winctl">
+        <!-- minimize: 8x8 bottom bar -->
+        <button type="button" aria-label="minimize">
+          <svg viewBox="0 0 8 8" shape-rendering="crispEdges" width="12" height="12"><rect x="1" y="6" width="6" height="1"/></svg>
+        </button>
+        <!-- maximize: 8x8 square frame -->
+        <button type="button" aria-label="maximize">
+          <svg viewBox="0 0 8 8" shape-rendering="crispEdges" width="12" height="12"><rect x="1" y="1" width="6" height="1"/><rect x="1" y="6" width="6" height="1"/><rect x="1" y="1" width="1" height="6"/><rect x="6" y="1" width="1" height="6"/></svg>
+        </button>
+        <!-- close: 8x8 X -->
+        <button type="button" aria-label="close">
+          <svg viewBox="0 0 8 8" shape-rendering="crispEdges" width="12" height="12"><rect x="1" y="1" width="1" height="1"/><rect x="2" y="2" width="1" height="1"/><rect x="3" y="3" width="2" height="2"/><rect x="5" y="5" width="1" height="1"/><rect x="6" y="6" width="1" height="1"/><rect x="6" y="1" width="1" height="1"/><rect x="5" y="2" width="1" height="1"/><rect x="2" y="5" width="1" height="1"/><rect x="1" y="6" width="1" height="1"/></svg>
+        </button>
+      </div>
+    </div>
+
+    <!-- ===== workspace ===== -->
+    <div class="workspace">
+
+      <!-- left rail: tools + material palette -->
+      <aside class="rail">
+
+        <div class="group">
+          <div class="ghead">Tools</div>
+          <div class="swatch-grid">
+            <div class="tile" title="Eraser">
+              <span class="chip" style="background-color: var(--m-eraser); background-image: linear-gradient(45deg, rgb(48,52,58) 25%, transparent 25% 75%, rgb(48,52,58) 75%), linear-gradient(45deg, rgb(48,52,58) 25%, transparent 25% 75%, rgb(48,52,58) 75%); background-size:4px 4px; background-position:0 0,2px 2px;"></span>
+              <div class="meta"><span class="mname">Eraser</span><kbd>E</kbd></div>
+            </div>
+            <div class="tile" title="Wall">
+              <span class="chip" style="background-color: var(--m-wall); background-image: linear-gradient(0deg, rgb(96,98,106) 1px, transparent 1px), linear-gradient(90deg, rgb(140,142,150) 1px, transparent 1px); background-size:4px 4px;"></span>
+              <div class="meta"><span class="mname">Wall</span><kbd>W</kbd></div>
+            </div>
+          </div>
+        </div>
+
+        <div class="group">
+          <div class="ghead">Powders</div>
+          <div class="swatch-grid">
+            <div class="tile" title="Sand">
+              <span class="chip" style="background-color: var(--m-sand); background-image: radial-gradient(rgb(168,152,94) 1px, transparent 1px), radial-gradient(rgb(216,202,150) 1px, transparent 1px); background-size:3px 3px; background-position:0 0, 1px 2px;"></span>
+              <div class="meta"><span class="mname">Sand</span><kbd>1</kbd></div>
+            </div>
+            <div class="tile" title="Gunpowder">
+              <span class="chip" style="background-color: var(--m-gunpwd); background-image: radial-gradient(rgb(40,38,46) 1px, transparent 1px), radial-gradient(rgb(96,94,104) 1px, transparent 1px); background-size:3px 3px; background-position:0 0, 1px 1px;"></span>
+              <div class="meta"><span class="mname">Gunpowd</span><kbd>2</kbd></div>
+            </div>
+          </div>
+        </div>
+
+        <div class="group">
+          <div class="ghead">Liquids</div>
+          <div class="swatch-grid">
+            <div class="tile" title="Water">
+              <span class="chip" style="background-color: var(--m-water); background-image: linear-gradient(0deg, rgb(38,84,170) 50%, transparent 50%); background-size:4px 2px;"></span>
+              <div class="meta"><span class="mname">Water</span><kbd>3</kbd></div>
+            </div>
+            <div class="tile" title="Oil">
+              <span class="chip" style="background-color: var(--m-oil); background-image: linear-gradient(0deg, rgb(60,50,32) 50%, transparent 50%); background-size:4px 2px;"></span>
+              <div class="meta"><span class="mname">Oil</span><kbd>4</kbd></div>
+            </div>
+            <div class="tile" title="Acid">
+              <span class="chip" style="background-color: var(--m-acid); background-image: radial-gradient(rgb(150,238,100) 1px, transparent 1px), radial-gradient(rgb(96,180,52) 1px, transparent 1px); background-size:3px 3px; background-position:0 0, 1px 2px;"></span>
+              <div class="meta"><span class="mname">Acid</span><kbd>5</kbd></div>
+            </div>
+            <!-- ACTIVE: Lava — glowing dither -->
+            <div class="tile active" title="Lava (active)">
+              <span class="chip" style="background-color: rgb(150,58,12); background-image: linear-gradient(45deg, rgb(255,180,80) 25%, transparent 25% 75%, rgb(255,180,80) 75%), linear-gradient(45deg, rgb(255,110,30) 25%, transparent 25% 75%, rgb(255,110,30) 75%); background-size:4px 4px; background-position:0 0, 2px 2px;"></span>
+              <div class="meta"><span class="mname">Lava</span><kbd>6</kbd></div>
+            </div>
+          </div>
+        </div>
+
+        <div class="group">
+          <div class="ghead">Solids</div>
+          <div class="swatch-grid">
+            <div class="tile" title="Stone">
+              <span class="chip" style="background-color: var(--m-stone); background-image: linear-gradient(0deg, rgb(78,78,86) 1px, transparent 1px), linear-gradient(90deg, rgb(118,118,126) 1px, transparent 1px); background-size:4px 4px;"></span>
+              <div class="meta"><span class="mname">Stone</span><kbd>7</kbd></div>
+            </div>
+            <div class="tile" title="Wood">
+              <span class="chip" style="background-color: var(--m-wood); background-image: linear-gradient(90deg, rgb(92,60,34) 50%, transparent 50%); background-size:2px 4px;"></span>
+              <div class="meta"><span class="mname">Wood</span><kbd>8</kbd></div>
+            </div>
+            <div class="tile" title="Plant">
+              <span class="chip" style="background-color: var(--m-plant); background-image: radial-gradient(rgb(30,128,42) 1px, transparent 1px), radial-gradient(rgb(70,200,84) 1px, transparent 1px); background-size:3px 3px; background-position:0 0, 1px 1px;"></span>
+              <div class="meta"><span class="mname">Plant</span><kbd>9</kbd></div>
+            </div>
+            <div class="tile" title="Ice">
+              <span class="chip" style="background-color: var(--m-ice); background-image: linear-gradient(45deg, rgb(150,190,220) 25%, transparent 25% 75%, rgb(150,190,220) 75%), linear-gradient(45deg, rgb(200,230,250) 25%, transparent 25% 75%, rgb(200,230,250) 75%); background-size:4px 4px; background-position:0 0, 2px 2px;"></span>
+              <div class="meta"><span class="mname">Ice</span><kbd>0</kbd></div>
+            </div>
+          </div>
+        </div>
+
+        <div class="group">
+          <div class="ghead">Energy</div>
+          <div class="swatch-grid">
+            <div class="tile" title="Fire">
+              <span class="chip" style="background-color: rgb(200,100,20); background-image: linear-gradient(0deg, rgb(255,200,80) 33%, transparent 33% 66%, rgb(255,110,30) 66%); background-size:4px 6px;"></span>
+              <div class="meta"><span class="mname">Fire</span><kbd>F</kbd></div>
+            </div>
+            <div class="tile" title="Smoke">
+              <span class="chip" style="background-color: var(--m-smoke); background-image: radial-gradient(rgb(72,72,78) 1px, transparent 1px), radial-gradient(rgb(108,108,114) 1px, transparent 1px); background-size:4px 4px; background-position:0 0, 2px 2px;"></span>
+              <div class="meta"><span class="mname">Smoke</span><kbd>S</kbd></div>
+            </div>
+            <div class="tile" title="Steam">
+              <span class="chip" style="background-color: var(--m-steam); background-image: radial-gradient(rgb(185,190,200) 1px, transparent 1px), radial-gradient(rgb(225,230,240) 1px, transparent 1px); background-size:4px 4px; background-position:0 0, 2px 2px;"></span>
+              <div class="meta"><span class="mname">Steam</span><kbd>T</kbd></div>
+            </div>
+          </div>
+        </div>
+
+      </aside>
+
+      <!-- canvas stage -->
+      <section class="stage">
+
+        <div class="stage-head">
+          <div class="hud">
+            <span class="stat fps"><b>59</b> fps</span>
+            <span class="stat"><b>12,403</b> particles</span>
+          </div>
+          <span class="hint">drag to draw · right-click to erase · space = pause</span>
+        </div>
+
+        <div class="mat">
+          <div class="canvas-frame">
+            <canvas id="sim"></canvas>
+          </div>
+        </div>
+
+        <!-- bottom toolbar -->
+        <div class="toolbar">
+
+          <div class="tool-cluster">
+            <!-- Play/Pause primary -->
+            <button type="button" class="btn primary" title="Play / Pause">
+              <svg viewBox="0 0 8 8" shape-rendering="crispEdges" width="16" height="16"><rect x="2" y="1" width="1" height="6"/><rect x="3" y="2" width="1" height="4"/><rect x="4" y="3" width="1" height="2"/></svg>
+              Play
+            </button>
+            <!-- Step -->
+            <button type="button" class="btn icon-only" title="Step one frame">
+              <svg viewBox="0 0 8 8" shape-rendering="crispEdges" width="16" height="16"><rect x="2" y="1" width="1" height="6"/><rect x="3" y="2" width="1" height="4"/><rect x="4" y="3" width="1" height="2"/><rect x="5" y="1" width="1" height="6"/></svg>
+            </button>
+            <!-- Clear -->
+            <button type="button" class="btn" title="Clear canvas">
+              <svg viewBox="0 0 8 8" shape-rendering="crispEdges" width="16" height="16"><rect x="1" y="2" width="6" height="1"/><rect x="2" y="2" width="1" height="5"/><rect x="5" y="2" width="1" height="5"/><rect x="2" y="6" width="4" height="1"/><rect x="3" y="1" width="2" height="1"/></svg>
+              Clear
+            </button>
+          </div>
+
+          <div class="divider"></div>
+
+          <div class="controls-strip">
+
+            <!-- Brush slider 1-40 = 18 -->
+            <div class="ctrl">
+              <div class="clabel">
+                <span>
+                  <svg viewBox="0 0 8 8" shape-rendering="crispEdges" width="10" height="10" style="vertical-align:-1px; fill:var(--muted);"><rect x="5" y="1" width="2" height="2"/><rect x="3" y="3" width="2" height="2"/><rect x="2" y="4" width="2" height="2"/><rect x="1" y="5" width="2" height="2"/></svg>
+                  Brush
+                </span>
+                <b>18</b>
+              </div>
+              <div class="slider" role="slider" aria-valuemin="1" aria-valuemax="40" aria-valuenow="18">
+                <span class="fill" style="width: 44%;"></span>
+                <span class="thumb" style="left: calc(44% - 4px);"></span>
+              </div>
+            </div>
+
+            <!-- Speed slider 1-6 = 2x -->
+            <div class="ctrl">
+              <div class="clabel"><span>Speed</span><b>2×</b></div>
+              <div class="slider" role="slider" aria-valuemin="1" aria-valuemax="6" aria-valuenow="2">
+                <span class="fill" style="width: 33%;"></span>
+                <span class="thumb" style="left: calc(33% - 4px);"></span>
+              </div>
+            </div>
+
+            <div class="divider"></div>
+
+            <!-- Glow toggle ON -->
+            <div class="toggle">
+              <span class="clabel">Glow</span>
+              <div class="switch on" role="switch" aria-checked="true" title="Glow ON">
+                <span class="stxt">ON</span>
+                <span class="knob"></span>
+              </div>
+            </div>
+
+            <!-- Light toggle OFF -->
+            <div class="toggle">
+              <span class="clabel">Light</span>
+              <div class="switch" role="switch" aria-checked="false" title="Light OFF">
+                <span class="knob"></span>
+                <span class="stxt">OFF</span>
+              </div>
+            </div>
+
+            <!-- Darkness slider, disabled because Light is off -->
+            <div class="ctrl disabled">
+              <div class="clabel"><span>Darkness</span><b>40</b></div>
+              <div class="slider" role="slider" aria-valuemin="0" aria-valuemax="100" aria-valuenow="40" aria-disabled="true">
+                <span class="fill" style="width: 40%;"></span>
+                <span class="thumb" style="left: calc(40% - 4px);"></span>
+              </div>
+            </div>
+
+          </div>
+        </div>
+
+      </section>
+    </div>
+  </div>
+
+  <script src="sand.js"></script>
+  <script>mountSand(document.getElementById('sim'));</script>
+</body>
+</html>

@@ -1,0 +1,538 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>POWDER_LAB v1.0</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600;700&family=VT323&display=swap" rel="stylesheet" />
+<style>
+  :root {
+    /* phosphor palette in OKLCH */
+    --bg-deep:    oklch(0.12 0.018 150);
+    --bg-panel:   oklch(0.16 0.02 150);
+    --bg-housing: oklch(0.18 0.012 150);
+    --bg-bezel:   oklch(0.22 0.01 150);
+    --bg-inset:   oklch(0.09 0.015 150);
+
+    --green:      oklch(0.84 0.19 145);
+    --green-dim:  oklch(0.62 0.13 145);
+    --green-faint:oklch(0.42 0.07 148);
+    --amber:      oklch(0.81 0.16 80);
+    --amber-dim:  oklch(0.6 0.12 80);
+
+    --line:       oklch(0.32 0.04 150);
+    --line-soft:  oklch(0.26 0.03 150);
+
+    --glow: 0 0 2px oklch(0.84 0.19 145 / 0.7), 0 0 6px oklch(0.84 0.19 145 / 0.35);
+    --glow-amber: 0 0 2px oklch(0.81 0.16 80 / 0.7), 0 0 6px oklch(0.81 0.16 80 / 0.35);
+
+    --mono: "IBM Plex Mono", "JetBrains Mono", monospace;
+  }
+
+  * { box-sizing: border-box; }
+
+  html, body {
+    margin: 0;
+    padding: 0;
+    min-height: 100%;
+    background:
+      radial-gradient(ellipse 120% 90% at 50% 45%, oklch(0.15 0.02 150) 0%, var(--bg-deep) 70%, oklch(0.08 0.015 150) 100%);
+    color: var(--green);
+    font-family: var(--mono);
+    font-size: 14px;
+    line-height: 1.4;
+    -webkit-font-smoothing: none;
+  }
+
+  body {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    padding: 28px 18px 60px;
+    position: relative;
+    overflow-x: hidden;
+  }
+
+  /* ---- whole-page CRT overlays ---- */
+  .crt-scanlines,
+  .crt-vignette {
+    position: fixed;
+    inset: 0;
+    pointer-events: none;
+    z-index: 9000;
+  }
+  .crt-scanlines {
+    background: repeating-linear-gradient(
+      0deg,
+      oklch(0.02 0.01 150 / 0.0) 0px,
+      oklch(0.02 0.01 150 / 0.0) 2px,
+      oklch(0.02 0.01 150 / 0.28) 3px,
+      oklch(0.02 0.01 150 / 0.28) 4px
+    );
+    mix-blend-mode: multiply;
+    opacity: 0.55;
+  }
+  .crt-vignette {
+    background:
+      radial-gradient(ellipse 100% 100% at 50% 50%, transparent 55%, oklch(0.05 0.012 150 / 0.55) 100%);
+    box-shadow: inset 0 0 160px oklch(0.04 0.01 150 / 0.8);
+  }
+  .crt-flicker {
+    position: fixed;
+    inset: 0;
+    pointer-events: none;
+    z-index: 9001;
+    background: oklch(0.84 0.19 145 / 0.012);
+    animation: flicker 5.5s infinite steps(1);
+  }
+  @keyframes flicker {
+    0%, 96%, 100% { opacity: 0.5; }
+    97% { opacity: 0.9; }
+    98% { opacity: 0.2; }
+    99% { opacity: 0.7; }
+  }
+
+  .shell {
+    width: 100%;
+    max-width: 1080px;
+    position: relative;
+    z-index: 10;
+  }
+
+  /* ---- boot header ---- */
+  .boot {
+    border: 1px solid var(--line);
+    background: var(--bg-panel);
+    padding: 10px 16px;
+    margin-bottom: 18px;
+    display: flex;
+    align-items: baseline;
+    gap: 14px;
+    flex-wrap: wrap;
+    box-shadow: inset 0 0 30px oklch(0.2 0.05 150 / 0.15);
+  }
+  .boot .prompt { color: var(--green-dim); text-shadow: var(--glow); }
+  .boot .title {
+    font-weight: 700;
+    letter-spacing: 0.14em;
+    color: var(--green);
+    text-shadow: var(--glow);
+  }
+  .boot .ver { color: var(--amber); text-shadow: var(--glow-amber); }
+  .boot .ready {
+    margin-left: auto;
+    color: var(--amber);
+    text-shadow: var(--glow-amber);
+    letter-spacing: 0.1em;
+  }
+  .boot .ready::after {
+    content: "_";
+    animation: caret 1.05s steps(1) infinite;
+  }
+  @keyframes caret { 0%,50%{opacity:1;} 51%,100%{opacity:0;} }
+
+  /* ---- main grid layout ---- */
+  .layout {
+    display: grid;
+    grid-template-columns: 268px minmax(0, 1fr) 248px;
+    gap: 18px;
+    align-items: start;
+  }
+
+  .panel {
+    border: 1px solid var(--line);
+    background: var(--bg-panel);
+    box-shadow: inset 0 0 30px oklch(0.2 0.05 150 / 0.12);
+  }
+  .panel-head {
+    padding: 7px 12px;
+    border-bottom: 1px dashed var(--line-soft);
+    color: var(--amber);
+    text-shadow: var(--glow-amber);
+    letter-spacing: 0.16em;
+    font-size: 12px;
+    text-transform: uppercase;
+    display: flex;
+    justify-content: space-between;
+  }
+  .panel-head .tag { color: var(--green-faint); text-shadow: none; }
+  .panel-body { padding: 10px 12px 14px; }
+
+  /* ---- palette text menu ---- */
+  .cat-label {
+    color: var(--green-faint);
+    letter-spacing: 0.14em;
+    font-size: 11px;
+    margin: 12px 0 4px;
+    text-transform: uppercase;
+  }
+  .cat-label:first-child { margin-top: 0; }
+  .cat-label::before { content: "// "; }
+
+  .mat-row {
+    display: grid;
+    grid-template-columns: 12px 12px 1fr auto;
+    align-items: center;
+    gap: 8px;
+    padding: 2px 6px;
+    color: var(--green-dim);
+    text-shadow: var(--glow);
+    cursor: pointer;
+    white-space: nowrap;
+    letter-spacing: 0.02em;
+  }
+  .mat-row .marker { color: var(--green-faint); text-shadow: none; visibility: hidden; }
+  .mat-row:hover { color: var(--green); }
+  .mat-row:hover .marker { visibility: visible; color: var(--green); }
+  .mat-row:hover .marker::before { content: ">"; }
+
+  .chip {
+    width: 11px;
+    height: 11px;
+    border: 1px solid oklch(0.4 0.03 150);
+    box-shadow: 0 0 3px currentColor;
+  }
+  .mat-name { overflow: hidden; }
+  .dots { color: var(--green-faint); text-shadow: none; }
+  .mat-key { color: var(--amber-dim); text-shadow: none; }
+
+  /* selected = inverted terminal selection */
+  .mat-row.active {
+    background: var(--green);
+    color: var(--bg-deep);
+    text-shadow: none;
+    box-shadow: 0 0 10px oklch(0.84 0.19 145 / 0.55);
+  }
+  .mat-row.active .marker { visibility: visible; color: var(--bg-deep); }
+  .mat-row.active .marker::before { content: ">"; }
+  .mat-row.active .dots,
+  .mat-row.active .mat-key { color: oklch(0.2 0.04 150); }
+  .mat-row.active .chip { border-color: var(--bg-deep); }
+
+  /* ---- center stage ---- */
+  .stage-col { display: flex; flex-direction: column; gap: 18px; align-items: stretch; }
+
+  .crt-housing {
+    background: var(--bg-housing);
+    border: 1px solid var(--line);
+    border-radius: 16px;
+    padding: 18px 18px 22px;
+    position: relative;
+    box-shadow:
+      0 0 0 1px oklch(0.1 0.01 150),
+      0 14px 40px oklch(0.04 0.01 150 / 0.7);
+  }
+  .crt-bezel {
+    background: var(--bg-bezel);
+    border-radius: 12px;
+    padding: 14px;
+    box-shadow:
+      inset 0 2px 4px oklch(0.3 0.02 150 / 0.4),
+      inset 0 -3px 8px oklch(0.05 0.01 150 / 0.7);
+    position: relative;
+  }
+  .crt-screen {
+    background: var(--bg-inset);
+    border-radius: 10px;
+    padding: 8px;
+    box-shadow:
+      inset 0 0 40px oklch(0.05 0.01 150 / 0.9),
+      inset 0 0 0 1px oklch(0.06 0.01 150);
+    display: flex;
+    justify-content: center;
+    position: relative;
+    overflow: hidden;
+  }
+  #sim {
+    image-rendering: pixelated;
+    aspect-ratio: 4 / 3;
+    width: 100%;
+    max-width: 720px;
+    display: block;
+    border-radius: 4px;
+    filter: saturate(1.05) brightness(1.04)
+            drop-shadow(0 0 4px oklch(0.7 0.12 145 / 0.25));
+  }
+  /* phosphor bloom + scan over the screen */
+  .crt-screen::after {
+    content: "";
+    position: absolute;
+    inset: 8px;
+    border-radius: 6px;
+    pointer-events: none;
+    background:
+      radial-gradient(ellipse 120% 80% at 50% 40%, oklch(0.6 0.1 145 / 0.06), transparent 70%),
+      repeating-linear-gradient(0deg, transparent 0 2px, oklch(0.02 0.01 150 / 0.22) 2px 3px);
+  }
+  /* power LED */
+  .led {
+    position: absolute;
+    right: 16px;
+    bottom: 6px;
+    display: flex;
+    align-items: center;
+    gap: 7px;
+    font-size: 11px;
+    letter-spacing: 0.12em;
+    color: var(--green-faint);
+  }
+  .led .dot {
+    width: 7px; height: 7px; border-radius: 50%;
+    background: var(--green);
+    box-shadow: 0 0 6px var(--green), 0 0 12px oklch(0.84 0.19 145 / 0.6);
+    animation: pulse 2.4s ease-in-out infinite;
+  }
+  @keyframes pulse { 0%,100%{opacity:1;} 50%{opacity:0.5;} }
+  .badge {
+    position: absolute;
+    left: 18px;
+    top: -1px;
+    font-family: "VT323", var(--mono);
+    font-size: 20px;
+    letter-spacing: 0.06em;
+    color: var(--green-faint);
+    background: var(--bg-housing);
+    padding: 0 8px;
+  }
+
+  /* ---- HUD status line ---- */
+  .hud {
+    border: 1px solid var(--line);
+    background: var(--bg-panel);
+    padding: 8px 14px;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px 20px;
+    align-items: center;
+    box-shadow: inset 0 0 24px oklch(0.2 0.05 150 / 0.12);
+  }
+  .hud .stat { color: var(--green); text-shadow: var(--glow); letter-spacing: 0.06em; }
+  .hud .stat .k { color: var(--green-faint); text-shadow: none; }
+  .hud .stat .amber { color: var(--amber); text-shadow: var(--glow-amber); }
+  .hud .hint {
+    margin-left: auto;
+    color: var(--green-faint);
+    text-shadow: none;
+    font-size: 12px;
+    letter-spacing: 0.02em;
+  }
+
+  /* ---- controls panel ---- */
+  .cmd-row { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 14px; }
+  .cmd {
+    flex: 1 1 auto;
+    text-align: center;
+    border: 1px solid var(--line);
+    background: transparent;
+    color: var(--green-dim);
+    text-shadow: var(--glow);
+    font-family: var(--mono);
+    font-size: 13px;
+    letter-spacing: 0.08em;
+    padding: 7px 4px;
+    cursor: pointer;
+    transition: all 0.08s linear;
+  }
+  .cmd:hover { color: var(--green); border-color: var(--green-dim); box-shadow: 0 0 10px oklch(0.84 0.19 145 / 0.2); }
+  .cmd.primary {
+    color: var(--bg-deep);
+    background: var(--green);
+    text-shadow: none;
+    border-color: var(--green);
+    box-shadow: 0 0 12px oklch(0.84 0.19 145 / 0.45);
+    font-weight: 600;
+  }
+  .cmd.primary:hover { background: oklch(0.88 0.2 145); }
+
+  .ctl { margin-bottom: 14px; }
+  .ctl-head {
+    display: flex;
+    justify-content: space-between;
+    color: var(--green-dim);
+    text-shadow: var(--glow);
+    letter-spacing: 0.06em;
+    margin-bottom: 4px;
+    font-size: 13px;
+  }
+  .ctl-head .val { color: var(--amber); text-shadow: var(--glow-amber); }
+
+  /* ASCII-style meter */
+  .meter {
+    font-family: "VT323", var(--mono);
+    font-size: 19px;
+    line-height: 1;
+    letter-spacing: 0.02em;
+    color: var(--green);
+    text-shadow: var(--glow);
+    white-space: nowrap;
+    overflow: hidden;
+  }
+  .meter .lo { color: var(--green-faint); text-shadow: none; }
+  .meter .lab {
+    font-family: var(--mono);
+    font-size: 11px;
+    color: var(--green-faint);
+    text-shadow: none;
+    margin: 0 6px;
+  }
+
+  /* toggles */
+  .toggle-row { display: flex; gap: 8px; margin-bottom: 12px; }
+  .toggle {
+    flex: 1;
+    border: 1px solid var(--line);
+    padding: 7px 10px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    cursor: pointer;
+    letter-spacing: 0.08em;
+    font-size: 13px;
+  }
+  .toggle .lbl { color: var(--green-dim); text-shadow: var(--glow); }
+  .toggle .state { font-weight: 600; }
+  .toggle.on { border-color: var(--green-dim); box-shadow: inset 0 0 16px oklch(0.6 0.12 145 / 0.12); }
+  .toggle.on .state { color: var(--green); text-shadow: var(--glow); }
+  .toggle.off .state { color: var(--green-faint); text-shadow: none; }
+
+  .ctl.disabled { opacity: 0.4; }
+  .ctl.disabled .ctl-head { color: var(--green-faint); text-shadow: none; }
+  .ctl.disabled .ctl-head .val { color: var(--green-faint); text-shadow: none; }
+  .ctl.disabled .meter { color: var(--green-faint); text-shadow: none; }
+  .ctl.disabled .note {
+    font-size: 11px;
+    color: var(--amber-dim);
+    letter-spacing: 0.04em;
+    margin-top: 3px;
+  }
+
+  .footer {
+    margin-top: 18px;
+    text-align: center;
+    color: var(--green-faint);
+    font-size: 11px;
+    letter-spacing: 0.18em;
+  }
+
+  @media (max-width: 920px) {
+    .layout { grid-template-columns: 1fr; }
+  }
+</style>
+</head>
+<body>
+  <div class="crt-scanlines"></div>
+  <div class="crt-vignette"></div>
+  <div class="crt-flicker"></div>
+
+  <div class="shell">
+    <!-- boot header -->
+    <header class="boot">
+      <span class="prompt">C:\&gt;</span>
+      <span class="title">POWDER_LAB</span>
+      <span class="ver">v1.0</span>
+      <span class="ready">SYSTEM READY</span>
+    </header>
+
+    <div class="layout">
+      <!-- LEFT: palette -->
+      <aside class="panel">
+        <div class="panel-head"><span>MATERIALS</span><span class="tag">[15]</span></div>
+        <div class="panel-body">
+
+          <div class="cat-label">tools</div>
+          <div class="mat-row"><span class="marker"></span><span class="chip" style="background:rgb(30,33,38)"></span><span class="mat-name">ERASER <span class="dots">..........</span></span><span class="mat-key">E</span></div>
+          <div class="mat-row"><span class="marker"></span><span class="chip" style="background:rgb(120,122,130)"></span><span class="mat-name">WALL <span class="dots">............</span></span><span class="mat-key">W</span></div>
+
+          <div class="cat-label">powders</div>
+          <div class="mat-row"><span class="marker"></span><span class="chip" style="background:rgb(196,180,120)"></span><span class="mat-name">SAND <span class="dots">............</span></span><span class="mat-key">1</span></div>
+          <div class="mat-row"><span class="marker"></span><span class="chip" style="background:rgb(70,68,78)"></span><span class="mat-name">GUNPOWDER <span class="dots">.....</span></span><span class="mat-key">2</span></div>
+
+          <div class="cat-label">liquids</div>
+          <div class="mat-row"><span class="marker"></span><span class="chip" style="background:rgb(54,108,200)"></span><span class="mat-name">WATER <span class="dots">...........</span></span><span class="mat-key">3</span></div>
+          <div class="mat-row"><span class="marker"></span><span class="chip" style="background:rgb(78,66,44)"></span><span class="mat-name">OIL <span class="dots">.............</span></span><span class="mat-key">4</span></div>
+          <div class="mat-row"><span class="marker"></span><span class="chip" style="background:rgb(120,214,70)"></span><span class="mat-name">ACID <span class="dots">............</span></span><span class="mat-key">5</span></div>
+          <div class="mat-row active"><span class="marker"></span><span class="chip" style="background:rgb(255,110,30)"></span><span class="mat-name">LAVA <span class="dots">............</span></span><span class="mat-key">6</span></div>
+
+          <div class="cat-label">solids</div>
+          <div class="mat-row"><span class="marker"></span><span class="chip" style="background:rgb(98,98,106)"></span><span class="mat-name">STONE <span class="dots">...........</span></span><span class="mat-key">7</span></div>
+          <div class="mat-row"><span class="marker"></span><span class="chip" style="background:rgb(112,74,42)"></span><span class="mat-name">WOOD <span class="dots">............</span></span><span class="mat-key">8</span></div>
+          <div class="mat-row"><span class="marker"></span><span class="chip" style="background:rgb(46,160,60)"></span><span class="mat-name">PLANT <span class="dots">...........</span></span><span class="mat-key">9</span></div>
+          <div class="mat-row"><span class="marker"></span><span class="chip" style="background:rgb(170,210,235)"></span><span class="mat-name">ICE <span class="dots">.............</span></span><span class="mat-key">0</span></div>
+
+          <div class="cat-label">energy</div>
+          <div class="mat-row"><span class="marker"></span><span class="chip" style="background:rgb(255,150,40)"></span><span class="mat-name">FIRE <span class="dots">............</span></span><span class="mat-key">F</span></div>
+          <div class="mat-row"><span class="marker"></span><span class="chip" style="background:rgb(90,90,96)"></span><span class="mat-name">SMOKE <span class="dots">...........</span></span><span class="mat-key">S</span></div>
+          <div class="mat-row"><span class="marker"></span><span class="chip" style="background:rgb(205,210,220)"></span><span class="mat-name">STEAM <span class="dots">...........</span></span><span class="mat-key">T</span></div>
+
+        </div>
+      </aside>
+
+      <!-- CENTER: CRT + HUD -->
+      <section class="stage-col">
+        <div class="crt-housing">
+          <span class="badge">CRT-160</span>
+          <div class="crt-bezel">
+            <div class="crt-screen">
+              <canvas id="sim"></canvas>
+            </div>
+          </div>
+          <div class="led"><span class="dot"></span>PWR</div>
+        </div>
+
+        <div class="hud">
+          <span class="stat"><span class="k">FPS:</span><span class="amber">59</span></span>
+          <span class="stat"><span class="k">PARTICLES:</span>12,403</span>
+          <span class="stat"><span class="k">MODE:</span>DRAW</span>
+          <span class="hint">drag to draw &middot; right-click to erase &middot; space = pause</span>
+        </div>
+      </section>
+
+      <!-- RIGHT: controls -->
+      <aside class="panel">
+        <div class="panel-head"><span>CONTROL</span><span class="tag">[sys]</span></div>
+        <div class="panel-body">
+
+          <div class="cmd-row">
+            <button class="cmd primary" type="button">[ &gt; RUN ]</button>
+            <button class="cmd" type="button">[ STEP ]</button>
+          </div>
+          <div class="cmd-row">
+            <button class="cmd" type="button">[ CLEAR ]</button>
+          </div>
+
+          <div class="ctl">
+            <div class="ctl-head"><span>BRUSH</span><span class="val">18 / 40</span></div>
+            <div class="meter"><span class="lab">[</span>██████████<span class="lo">··············</span><span class="lab">]</span></div>
+          </div>
+
+          <div class="ctl">
+            <div class="ctl-head"><span>SPEED</span><span class="val">2&times;</span></div>
+            <div class="meter"><span class="lab">[</span>██<span class="lo">····</span><span class="lab">]</span> <span class="lab">1&middot;2&middot;3&middot;4&middot;5&middot;6</span></div>
+          </div>
+
+          <div class="panel-head" style="border-top:1px dashed var(--line-soft); border-bottom:none; padding-left:0; padding-right:0; margin-top:6px;"><span>RENDER FLAGS</span></div>
+
+          <div class="toggle-row">
+            <div class="toggle on"><span class="lbl">GLOW</span><span class="state">ON</span></div>
+            <div class="toggle off"><span class="lbl">LIGHT</span><span class="state">OFF</span></div>
+          </div>
+
+          <div class="ctl disabled">
+            <div class="ctl-head"><span>DARKNESS</span><span class="val">0 / 100</span></div>
+            <div class="meter"><span class="lab">[</span><span class="lo">························</span><span class="lab">]</span></div>
+            <div class="note">// req LIGHT:ON</div>
+          </div>
+
+        </div>
+      </aside>
+    </div>
+
+    <div class="footer">PHOSPHOR DISPLAY UNIT &middot; 60HZ &middot; NTSC &middot; (C) POWDER SYSTEMS</div>
+  </div>
+
+  <script src="sand.js"></script>
+  <script>mountSand(document.getElementById('sim'));</script>
+</body>
+</html>

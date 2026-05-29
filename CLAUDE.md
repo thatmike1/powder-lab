@@ -62,6 +62,21 @@ Three invariants make it correct — break any one and you get subtle, hard-to-s
 - `vite.config.ts` sets `base` to `/powder-lab/` **only for production builds** (`command === 'build'`); dev stays at `/`. If the repo is renamed, update this and the URLs in `index.html`'s Open Graph tags.
 - The social-preview card is `public/og.png` (referenced by absolute URL in `index.html` OG/Twitter meta). GitHub's *repo* social preview (shown on github.com itself) has no API and must be uploaded manually in repo Settings.
 
+## Design Context
+
+The UI chrome's design direction is documented in **`PRODUCT.md`** (strategy: register, users,
+personality, anti-references, principles) and **`DESIGN.md`** (visual system: tokens, type,
+components, styling conventions). Read those before any chrome/UI work.
+
+In one line: **pixel-native chrome** that shares the medium of the simulation (crisp, dithered,
+hand-pixeled; warm-dark, accent follows the selected material), framed in a lifted desktop "window"
+with a left material palette and a bottom control bar. Styling stays **plain CSS + a `:root` token
+layer** (no framework); inline `style` is only for data-driven material colors and the live
+`--accent` variable. Approved reference mock: `design-explorations/10-hybrid.html`.
+
+The redesign of `App.tsx` / `styles.css` to match is tracked in `powder-lab-m86` (the direction
+half is done; the implementation pass is deferred until the heat-field work lands).
+
 ## Roadmap / future ideas
 
 Not commitments — pick whatever's fun. Two orderings below: one by how much each idea improves the codebase, one by how much it'd make a viewer go "whoa."

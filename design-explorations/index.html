@@ -1,0 +1,264 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Powder Lab — aesthetic explorations</title>
+    <style>
+      :root {
+        color-scheme: dark;
+        --bg: oklch(0.18 0.012 260);
+        --panel: oklch(0.22 0.014 260);
+        --line: oklch(0.32 0.016 260);
+        --text: oklch(0.93 0.01 260);
+        --muted: oklch(0.66 0.015 260);
+      }
+      * {
+        box-sizing: border-box;
+      }
+      body {
+        margin: 0;
+        min-height: 100vh;
+        background: var(--bg);
+        color: var(--text);
+        font: 15px/1.5 ui-sans-serif, system-ui, sans-serif;
+        -webkit-font-smoothing: antialiased;
+        padding: 64px 28px 80px;
+      }
+      .wrap {
+        max-width: 920px;
+        margin: 0 auto;
+      }
+      h1 {
+        margin: 0 0 4px;
+        font-size: 30px;
+        letter-spacing: -0.02em;
+        font-weight: 650;
+      }
+      .sub {
+        margin: 0 0 40px;
+        color: var(--muted);
+        max-width: 60ch;
+      }
+      .grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+        gap: 16px;
+      }
+      a.card {
+        display: block;
+        text-decoration: none;
+        color: inherit;
+        background: var(--panel);
+        border: 1px solid var(--line);
+        border-radius: 14px;
+        padding: 20px 20px 22px;
+        transition:
+          border-color 0.18s cubic-bezier(0.2, 0.7, 0.2, 1),
+          transform 0.18s cubic-bezier(0.2, 0.7, 0.2, 1);
+      }
+      a.card:hover {
+        border-color: var(--text);
+        transform: translateY(-3px);
+      }
+      .num {
+        font:
+          12px ui-monospace,
+          monospace;
+        color: var(--muted);
+        letter-spacing: 0.1em;
+      }
+      .name {
+        font-size: 19px;
+        font-weight: 600;
+        margin: 8px 0 6px;
+        letter-spacing: -0.01em;
+      }
+      .desc {
+        color: var(--muted);
+        font-size: 13.5px;
+        line-height: 1.55;
+      }
+      .swatchstrip {
+        display: flex;
+        gap: 5px;
+        margin-top: 16px;
+      }
+      .swatchstrip span {
+        width: 22px;
+        height: 8px;
+        border-radius: 3px;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="wrap">
+      <h1>Powder Lab — aesthetic explorations</h1>
+      <p class="sub">
+        The same live simulation runs in every mock, so the only thing changing is the skin around
+        it. Open one, then come back and compare.
+      </p>
+
+      <h2
+        style="
+          margin: 0 0 4px;
+          font-size: 13px;
+          letter-spacing: 0.12em;
+          text-transform: uppercase;
+          color: var(--muted);
+        "
+      >
+        Round 2 — pixel-native
+      </h2>
+      <p class="sub" style="margin-bottom: 22px">
+        Chrome made of the same material as the canvas: crisp, dithered, hand-pixeled. Start here.
+      </p>
+      <div class="grid" style="margin-bottom: 48px">
+        <a class="card" href="07-pixel-workbench.html">
+          <div class="num">07</div>
+          <div class="name">Pixel Workbench</div>
+          <div class="desc">
+            A loving pixel-art paint tool (Aseprite / Deluxe Paint). Warm-dark chrome, hand-pixeled
+            icons, textured material tiles, the selected material's color as the accent.
+          </div>
+          <div class="swatchstrip">
+            <span style="background: oklch(0.2 0.012 60)"></span>
+            <span style="background: oklch(0.285 0.013 60)"></span>
+            <span style="background: oklch(0.7 0.19 45)"></span>
+            <span style="background: oklch(0.9 0.012 85)"></span>
+          </div>
+        </a>
+        <a class="card" href="08-fantasy-console.html">
+          <div class="num">08</div>
+          <div class="name">Fantasy Console</div>
+          <div class="desc">
+            A PICO-8 handheld. The full-color sim glows inside a chunky screen bezel; the chrome
+            commits to a tiny fixed console palette. Boldest and most characterful.
+          </div>
+          <div class="swatchstrip">
+            <span style="background: #1d2b53"></span>
+            <span style="background: #ffa300"></span>
+            <span style="background: #29adff"></span>
+            <span style="background: #fff1e8"></span>
+          </div>
+        </a>
+        <a class="card" href="09-in-world-noita.html">
+          <div class="num">09</div>
+          <div class="name">In-World (Noita)</div>
+          <div class="desc">
+            Chrome carved from the cave the sim lives in. Dithered-noise stone, carved pixel bevels,
+            firelight glow built from hard dither rings. Moodiest, most "game".
+          </div>
+          <div class="swatchstrip">
+            <span style="background: oklch(0.15 0.012 50)"></span>
+            <span style="background: oklch(0.7 0.19 45)"></span>
+            <span style="background: oklch(0.35 0.03 60)"></span>
+            <span style="background: oklch(0.78 0.1 80)"></span>
+          </div>
+        </a>
+      </div>
+
+      <h2
+        style="
+          margin: 0 0 4px;
+          font-size: 13px;
+          letter-spacing: 0.12em;
+          text-transform: uppercase;
+          color: var(--muted);
+        "
+      >
+        Round 1 — missed the brief
+      </h2>
+      <p class="sub" style="margin-bottom: 22px">
+        Web styles bolted onto a pixel toy. Kept for reference / contrast, but none of these
+        respected the medium.
+      </p>
+      <div class="grid">
+        <a class="card" href="01-lab-instrument.html">
+          <div class="num">01</div>
+          <div class="name">Lab Instrument</div>
+          <div class="desc">
+            Clinical and scientific. Monospace readouts, calibration ticks, gridded panels,
+            restrained cyan + amber data accents.
+          </div>
+          <div class="swatchstrip">
+            <span style="background: oklch(0.2 0.02 240)"></span>
+            <span style="background: oklch(0.7 0.13 200)"></span>
+            <span style="background: oklch(0.8 0.14 80)"></span>
+            <span style="background: oklch(0.92 0.01 240)"></span>
+          </div>
+        </a>
+        <a class="card" href="02-refined-gallery.html">
+          <div class="num">02</div>
+          <div class="name">Refined Gallery</div>
+          <div class="desc">
+            The quietest. Deep neutral, generous space, type-led hierarchy, chrome nearly invisible,
+            the sim framed like art.
+          </div>
+          <div class="swatchstrip">
+            <span style="background: oklch(0.16 0.008 60)"></span>
+            <span style="background: oklch(0.5 0.01 60)"></span>
+            <span style="background: oklch(0.85 0.02 60)"></span>
+            <span style="background: oklch(0.7 0.14 40)"></span>
+          </div>
+        </a>
+        <a class="card" href="03-arcade-neon.html">
+          <div class="num">03</div>
+          <div class="name">Arcade Neon</div>
+          <div class="desc">
+            The loudest. The canvas is a glowing screen, swatches lit with their material color,
+            chunky game-HUD controls, saturated bloom.
+          </div>
+          <div class="swatchstrip">
+            <span style="background: oklch(0.15 0.03 280)"></span>
+            <span style="background: oklch(0.72 0.2 330)"></span>
+            <span style="background: oklch(0.78 0.18 190)"></span>
+            <span style="background: oklch(0.8 0.19 95)"></span>
+          </div>
+        </a>
+        <a class="card" href="04-retro-crt.html">
+          <div class="num">04</div>
+          <div class="name">Retro CRT</div>
+          <div class="desc">
+            Phosphor terminal. Near-black with green/amber glow, scanlines, all-monospace, pixel-era
+            bezel. Coherent with the pixels.
+          </div>
+          <div class="swatchstrip">
+            <span style="background: oklch(0.14 0.02 150)"></span>
+            <span style="background: oklch(0.82 0.2 145)"></span>
+            <span style="background: oklch(0.8 0.16 80)"></span>
+            <span style="background: oklch(0.3 0.03 150)"></span>
+          </div>
+        </a>
+        <a class="card" href="05-brutalist-editorial.html">
+          <div class="num">05</div>
+          <div class="name">Brutalist Editorial</div>
+          <div class="desc">
+            Stark and confident. Off-white + ink, hard 1px rules, exposed grid, grotesk + mono type,
+            one hot accent. The anti-SaaS.
+          </div>
+          <div class="swatchstrip">
+            <span style="background: oklch(0.95 0.005 90)"></span>
+            <span style="background: oklch(0.18 0.01 90)"></span>
+            <span style="background: oklch(0.65 0.24 28)"></span>
+            <span style="background: oklch(0.5 0.01 90)"></span>
+          </div>
+        </a>
+        <a class="card" href="06-risograph-print.html">
+          <div class="num">06</div>
+          <div class="name">Risograph Print</div>
+          <div class="desc">
+            Warm paper, two or three spot inks, halftone grain. Playful and sophisticated without
+            being childish. Screenshot-friendly.
+          </div>
+          <div class="swatchstrip">
+            <span style="background: oklch(0.93 0.03 90)"></span>
+            <span style="background: oklch(0.66 0.22 10)"></span>
+            <span style="background: oklch(0.6 0.18 250)"></span>
+            <span style="background: oklch(0.25 0.02 60)"></span>
+          </div>
+        </a>
+      </div>
+    </div>
+  </body>
+</html>

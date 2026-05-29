@@ -1,0 +1,654 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Powder Lab — Instrument Console</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600&display=swap" rel="stylesheet" />
+<style>
+  :root {
+    /* engineered slate panel, faint cyan cast — no pure black/white anywhere */
+    --bg:        oklch(0.185 0.015 240);
+    --panel:     oklch(0.215 0.016 240);
+    --panel-2:   oklch(0.245 0.017 240);
+    --inset:     oklch(0.155 0.014 240);
+    --rule:      oklch(0.34 0.018 240);
+    --rule-soft: oklch(0.28 0.016 240);
+
+    --ink:       oklch(0.90 0.012 230);
+    --ink-dim:   oklch(0.70 0.015 235);
+    --ink-faint: oklch(0.55 0.016 240);
+
+    /* data accents — "live / measured", used sparingly */
+    --cyan:      oklch(0.72 0.13 200);
+    --cyan-soft: oklch(0.72 0.13 200 / 0.16);
+    --amber:     oklch(0.80 0.14 80);
+    --amber-soft:oklch(0.80 0.14 80 / 0.16);
+    --green-led: oklch(0.78 0.17 145);
+
+    --mono: 'IBM Plex Mono', ui-monospace, monospace;
+    --sans: 'IBM Plex Sans', system-ui, sans-serif;
+  }
+
+  * { box-sizing: border-box; }
+
+  html, body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--ink);
+    font-family: var(--sans);
+    -webkit-font-smoothing: antialiased;
+  }
+
+  body {
+    min-height: 100vh;
+    display: flex;
+    align-items: flex-start;
+    justify-content: center;
+    padding: 28px 20px 48px;
+    /* faint engineered grid wash + vignette */
+    background-image:
+      radial-gradient(120% 90% at 50% -10%, oklch(0.24 0.02 235 / 0.55), transparent 60%),
+      repeating-linear-gradient(0deg, oklch(0.5 0.02 240 / 0.025) 0 1px, transparent 1px 26px),
+      repeating-linear-gradient(90deg, oklch(0.5 0.02 240 / 0.025) 0 1px, transparent 1px 26px);
+  }
+
+  .console {
+    width: 100%;
+    max-width: 1140px;
+    background: var(--panel);
+    border: 1px solid var(--rule);
+    box-shadow:
+      0 1px 0 oklch(0.42 0.02 240 / 0.4) inset,
+      0 26px 70px -30px oklch(0.08 0.02 240 / 0.9);
+  }
+
+  /* ---------- header / specimen log ---------- */
+  .topbar {
+    display: flex;
+    align-items: stretch;
+    justify-content: space-between;
+    gap: 16px;
+    padding: 12px 18px;
+    border-bottom: 1px solid var(--rule);
+    background:
+      linear-gradient(180deg, var(--panel-2), var(--panel));
+  }
+  .ident { display: flex; align-items: center; gap: 14px; }
+  .mark {
+    width: 30px; height: 30px;
+    border: 1px solid var(--cyan);
+    display: grid; place-items: center;
+    color: var(--cyan);
+    box-shadow: 0 0 0 1px oklch(0.72 0.13 200 / 0.18), 0 0 14px -4px var(--cyan) inset;
+  }
+  .title-block .title {
+    font-family: var(--mono);
+    font-weight: 600;
+    letter-spacing: 0.32em;
+    font-size: 15px;
+    color: var(--ink);
+    margin: 0;
+    text-indent: 0.32em;
+  }
+  .title-block .sub {
+    font-family: var(--mono);
+    font-size: 10.5px;
+    letter-spacing: 0.06em;
+    color: var(--ink-faint);
+    margin-top: 3px;
+  }
+  .sub .tok { color: var(--cyan); }
+
+  .sys-readout {
+    display: flex;
+    align-items: center;
+    gap: 22px;
+    font-family: var(--mono);
+    font-size: 10.5px;
+    letter-spacing: 0.05em;
+    color: var(--ink-faint);
+  }
+  .sys-readout .kv b {
+    color: var(--ink-dim);
+    font-weight: 500;
+  }
+  .led {
+    display: inline-flex; align-items: center; gap: 7px;
+    color: var(--green-led);
+  }
+  .led .dot {
+    width: 7px; height: 7px; border-radius: 50%;
+    background: var(--green-led);
+    box-shadow: 0 0 8px 0 var(--green-led);
+    animation: blink 2.4s steps(1) infinite;
+  }
+  @keyframes blink { 0%,92% { opacity:1 } 93%,100% { opacity:0.35 } }
+
+  /* ---------- main 3-column instrument layout ---------- */
+  .body {
+    display: grid;
+    grid-template-columns: 268px minmax(0,1fr) 248px;
+  }
+  .col { padding: 0; }
+  .col + .col { border-left: 1px solid var(--rule); }
+
+  .section-head {
+    display: flex; align-items: baseline; justify-content: space-between;
+    padding: 10px 14px 8px;
+    border-bottom: 1px solid var(--rule-soft);
+    font-family: var(--mono);
+    font-size: 9.5px;
+    letter-spacing: 0.22em;
+    color: var(--ink-faint);
+    text-transform: uppercase;
+  }
+  .section-head .idx { color: var(--cyan); }
+
+  /* ---------- left: palette as measured table ---------- */
+  .cat-label {
+    padding: 9px 14px 4px;
+    font-family: var(--mono);
+    font-size: 9px;
+    letter-spacing: 0.2em;
+    color: var(--amber);
+    text-transform: uppercase;
+    display: flex; align-items: center; gap: 8px;
+  }
+  .cat-label::after {
+    content: ""; flex: 1; height: 1px; background: var(--rule-soft);
+  }
+  .mat-row {
+    display: grid;
+    grid-template-columns: 38px 18px 1fr 22px;
+    align-items: center;
+    gap: 9px;
+    padding: 4px 14px;
+    font-family: var(--mono);
+    font-size: 11px;
+    color: var(--ink-dim);
+    cursor: pointer;
+    border-left: 2px solid transparent;
+  }
+  .mat-row:hover { background: oklch(0.27 0.018 240 / 0.6); }
+  .mat-row .code { color: var(--ink-faint); font-size: 10px; letter-spacing: 0.04em; }
+  .mat-row .chip {
+    width: 16px; height: 16px;
+    border: 1px solid oklch(0.5 0.02 240 / 0.6);
+    box-shadow: 0 0 0 1px oklch(0.12 0.02 240 / 0.7) inset;
+  }
+  .mat-row .name { color: var(--ink); letter-spacing: 0.02em; }
+  .mat-row .key {
+    font-size: 9.5px;
+    color: var(--ink-faint);
+    border: 1px solid var(--rule);
+    text-align: center;
+    line-height: 15px;
+    height: 16px;
+    background: var(--inset);
+  }
+  /* active specimen — crisp cyan indicator, no glow blob */
+  .mat-row.active {
+    background: var(--cyan-soft);
+    color: var(--ink);
+  }
+  .mat-row.active .code { color: var(--cyan); }
+  .mat-row.active .name { color: var(--ink); font-weight: 600; }
+  .mat-row.active::before {
+    content: "▸";
+    position: absolute;
+    margin-left: -11px;
+    color: var(--cyan);
+    font-size: 10px;
+  }
+  .mat-row.active .key {
+    border-color: var(--cyan);
+    color: var(--cyan);
+  }
+
+  /* ---------- center: display / graticule ---------- */
+  .stage {
+    padding: 18px 18px 14px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 12px;
+  }
+  .scope {
+    position: relative;
+    width: 100%;
+    max-width: 720px;
+    padding: 22px 16px 16px 28px;
+    background: var(--inset);
+    border: 1px solid var(--rule);
+    box-shadow: 0 0 0 1px oklch(0.12 0.02 240) inset;
+  }
+  /* corner registration marks */
+  .scope::before, .scope::after {
+    content: ""; position: absolute; width: 10px; height: 10px;
+    border: 1px solid var(--cyan); opacity: 0.55;
+  }
+  .scope::before { top: 6px; left: 6px; border-right: 0; border-bottom: 0; }
+  .scope::after  { bottom: 6px; right: 6px; border-left: 0; border-top: 0; }
+
+  .screen-wrap { position: relative; }
+
+  /* graticule: ticks along top and left, like an oscilloscope ruler */
+  .ticks {
+    position: absolute;
+    font-family: var(--mono);
+    font-size: 8px;
+    color: var(--ink-faint);
+    pointer-events: none;
+  }
+  .ticks.top {
+    left: 0; right: 0; top: -14px; height: 12px;
+    background-image: repeating-linear-gradient(90deg,
+      oklch(0.55 0.02 240 / 0.5) 0 1px, transparent 1px 10%);
+  }
+  .ticks.top .lab { position: absolute; top: -1px; transform: translateX(-50%); }
+  .ticks.left {
+    top: 0; bottom: 0; left: -22px; width: 18px;
+    background-image: repeating-linear-gradient(0deg,
+      oklch(0.55 0.02 240 / 0.5) 0 1px, transparent 1px 12.5%);
+  }
+  .ticks.left .lab { position: absolute; right: 2px; transform: translateY(-50%); }
+
+  canvas#sim {
+    display: block;
+    width: 100%;
+    max-width: 720px;
+    aspect-ratio: 4 / 3;
+    image-rendering: pixelated;
+    background: oklch(0.12 0.015 240);
+    border: 1px solid var(--rule);
+    /* subtle scope bloom on emissive cells */
+    filter: saturate(1.08) contrast(1.02);
+    box-shadow:
+      0 0 0 1px oklch(0.1 0.02 240) inset,
+      0 0 26px -6px oklch(0.72 0.13 200 / 0.18);
+  }
+  /* faint scanline overlay over the display */
+  .screen-wrap .scan {
+    position: absolute; inset: 0; pointer-events: none;
+    background: repeating-linear-gradient(0deg,
+      oklch(0.1 0.01 240 / 0.18) 0 2px, transparent 2px 4px);
+    mix-blend-mode: multiply;
+  }
+
+  .scope-meta {
+    display: flex; justify-content: space-between;
+    width: 100%;
+    margin-top: 10px;
+    font-family: var(--mono);
+    font-size: 9px;
+    letter-spacing: 0.12em;
+    color: var(--ink-faint);
+  }
+  .scope-meta .tok { color: var(--cyan); }
+
+  /* HUD readouts under the scope */
+  .hud {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 1px;
+    width: 100%;
+    max-width: 720px;
+    background: var(--rule-soft);
+    border: 1px solid var(--rule-soft);
+  }
+  .gauge {
+    background: var(--panel);
+    padding: 9px 12px;
+    display: flex; flex-direction: column; gap: 3px;
+  }
+  .gauge .lab {
+    font-family: var(--mono); font-size: 8.5px; letter-spacing: 0.2em;
+    color: var(--ink-faint); text-transform: uppercase;
+  }
+  .gauge .val {
+    font-family: var(--mono); font-size: 18px; font-weight: 500;
+    color: var(--ink); line-height: 1;
+  }
+  .gauge .val u { color: var(--ink-faint); font-size: 11px; text-decoration: none; font-weight: 400; }
+  .gauge.live .val { color: var(--cyan); }
+  /* faux sparkline */
+  .spark {
+    height: 16px; margin-top: 2px;
+    display: flex; align-items: flex-end; gap: 2px;
+  }
+  .spark i {
+    flex: 1; background: var(--amber); opacity: 0.85; display: block;
+  }
+  .hint {
+    width: 100%; max-width: 720px;
+    margin-top: 2px;
+    font-family: var(--mono);
+    font-size: 10px;
+    letter-spacing: 0.04em;
+    color: var(--ink-faint);
+    border-top: 1px solid var(--rule-soft);
+    padding-top: 9px;
+  }
+  .hint .sep { color: var(--rule); padding: 0 4px; }
+  .hint b { color: var(--ink-dim); font-weight: 500; }
+
+  /* ---------- right: controls ---------- */
+  .ctrl-group { padding: 12px 14px; border-bottom: 1px solid var(--rule-soft); }
+  .transport { display: grid; grid-template-columns: 1fr auto auto; gap: 8px; }
+  .btn {
+    font-family: var(--mono);
+    font-size: 10.5px;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: var(--ink-dim);
+    background: var(--panel-2);
+    border: 1px solid var(--rule);
+    padding: 9px 10px;
+    display: inline-flex; align-items: center; justify-content: center; gap: 7px;
+    cursor: pointer;
+    border-radius: 0;
+  }
+  .btn:hover { border-color: var(--cyan); color: var(--ink); }
+  .btn svg { width: 12px; height: 12px; }
+  .btn.primary {
+    color: var(--bg);
+    background: var(--amber);
+    border-color: var(--amber);
+    font-weight: 600;
+  }
+  .btn.primary svg { stroke: var(--bg); fill: var(--bg); }
+  .btn.icon { width: 42px; padding: 9px 0; }
+
+  .field { margin-top: 14px; }
+  .field:first-child { margin-top: 0; }
+  .field .head {
+    display: flex; justify-content: space-between; align-items: baseline;
+    font-family: var(--mono); font-size: 9.5px; letter-spacing: 0.16em;
+    text-transform: uppercase; color: var(--ink-faint);
+    margin-bottom: 7px;
+  }
+  .field .head .read { color: var(--cyan); font-size: 11px; letter-spacing: 0.05em; }
+
+  /* calibrated fader */
+  .fader { position: relative; height: 26px; }
+  .fader .track {
+    position: absolute; top: 50%; left: 0; right: 0; height: 3px;
+    transform: translateY(-50%);
+    background: var(--inset);
+    border: 1px solid var(--rule);
+  }
+  .fader .fill {
+    position: absolute; top: 50%; left: 0; height: 3px;
+    transform: translateY(-50%);
+    background: var(--cyan);
+  }
+  .fader .ticks-row {
+    position: absolute; inset: 0;
+    background-image: repeating-linear-gradient(90deg,
+      var(--rule) 0 1px, transparent 1px calc(100%/12));
+    opacity: 0.5;
+  }
+  .fader .knob {
+    position: absolute; top: 50%; transform: translate(-50%,-50%);
+    width: 8px; height: 18px;
+    background: var(--ink-dim);
+    border: 1px solid var(--ink);
+    box-shadow: 0 0 8px -2px var(--cyan);
+  }
+  .fader.disabled .fill { background: var(--rule); }
+  .fader.disabled .knob { background: var(--rule); border-color: var(--rule-soft); box-shadow: none; }
+  .fader .scale {
+    position: absolute; bottom: -13px; left: 0; right: 0;
+    display: flex; justify-content: space-between;
+    font-family: var(--mono); font-size: 8px; color: var(--ink-faint);
+  }
+
+  /* switch */
+  .switch-row {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 4px 0;
+  }
+  .switch-row .lab {
+    font-family: var(--mono); font-size: 10.5px; letter-spacing: 0.08em;
+    color: var(--ink-dim);
+  }
+  .switch {
+    display: inline-flex; align-items: center; gap: 8px;
+    font-family: var(--mono); font-size: 9px; letter-spacing: 0.14em;
+  }
+  .toggle {
+    width: 42px; height: 20px;
+    border: 1px solid var(--rule);
+    background: var(--inset);
+    position: relative;
+    display: inline-block;
+  }
+  .toggle::after {
+    content: ""; position: absolute; top: 2px; left: 2px;
+    width: 16px; height: 14px;
+    background: var(--ink-faint);
+  }
+  .toggle.on { border-color: var(--cyan); background: var(--cyan-soft); }
+  .toggle.on::after { left: auto; right: 2px; background: var(--cyan); box-shadow: 0 0 8px -1px var(--cyan); }
+  .state-on  { color: var(--cyan); }
+  .state-off { color: var(--ink-faint); }
+
+  .disabled-note {
+    font-family: var(--mono); font-size: 8.5px; letter-spacing: 0.06em;
+    color: var(--ink-faint); margin-top: 6px; opacity: 0.8;
+  }
+  .field.is-disabled .head, .field.is-disabled .scale { opacity: 0.45; }
+
+  .footer {
+    display: flex; justify-content: space-between;
+    padding: 8px 18px;
+    border-top: 1px solid var(--rule);
+    font-family: var(--mono); font-size: 9px; letter-spacing: 0.14em;
+    color: var(--ink-faint);
+  }
+</style>
+</head>
+<body>
+  <main class="console">
+
+    <!-- ===== HEADER / SPECIMEN LOG ===== -->
+    <header class="topbar">
+      <div class="ident">
+        <div class="mark" aria-hidden="true">
+          <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.3">
+            <rect x="2.5" y="2.5" width="11" height="11"/>
+            <path d="M2.5 8 H13.5 M8 2.5 V13.5" stroke-width="0.8"/>
+            <circle cx="8" cy="8" r="1.4" fill="currentColor" stroke="none"/>
+          </svg>
+        </div>
+        <div class="title-block">
+          <h1 class="title">POWDER&nbsp;LAB</h1>
+          <div class="sub">specimen&nbsp;<span class="tok">04</span> · 160×120 lattice · build&nbsp;<span class="tok">2.3.1</span></div>
+        </div>
+      </div>
+      <div class="sys-readout">
+        <span class="kv">grid <b>19,200</b> cells</span>
+        <span class="kv">Δt <b>16.6ms</b></span>
+        <span class="led"><span class="dot"></span> SIM&nbsp;ACTIVE</span>
+      </div>
+    </header>
+
+    <div class="body">
+
+      <!-- ===== LEFT: PALETTE TABLE ===== -->
+      <section class="col">
+        <div class="section-head"><span>Material Index</span><span class="idx">14 SP</span></div>
+
+        <div class="cat-label">Tools</div>
+        <div class="mat-row"><span class="code">01</span><span class="chip" style="background:rgb(30,33,38)"></span><span class="name">Eraser</span><span class="key">E</span></div>
+        <div class="mat-row"><span class="code">02</span><span class="chip" style="background:rgb(120,122,130)"></span><span class="name">Wall</span><span class="key">W</span></div>
+
+        <div class="cat-label">Powders</div>
+        <div class="mat-row"><span class="code">03</span><span class="chip" style="background:rgb(196,180,120)"></span><span class="name">Sand</span><span class="key">1</span></div>
+        <div class="mat-row"><span class="code">04</span><span class="chip" style="background:rgb(70,68,78)"></span><span class="name">Gunpowder</span><span class="key">2</span></div>
+
+        <div class="cat-label">Liquids</div>
+        <div class="mat-row"><span class="code">05</span><span class="chip" style="background:rgb(54,108,200)"></span><span class="name">Water</span><span class="key">3</span></div>
+        <div class="mat-row"><span class="code">06</span><span class="chip" style="background:rgb(78,66,44)"></span><span class="name">Oil</span><span class="key">4</span></div>
+        <div class="mat-row"><span class="code">07</span><span class="chip" style="background:rgb(120,214,70)"></span><span class="name">Acid</span><span class="key">5</span></div>
+        <div class="mat-row active"><span class="code">08</span><span class="chip" style="background:rgb(255,110,30)"></span><span class="name">Lava</span><span class="key">6</span></div>
+
+        <div class="cat-label">Solids</div>
+        <div class="mat-row"><span class="code">09</span><span class="chip" style="background:rgb(98,98,106)"></span><span class="name">Stone</span><span class="key">7</span></div>
+        <div class="mat-row"><span class="code">10</span><span class="chip" style="background:rgb(112,74,42)"></span><span class="name">Wood</span><span class="key">8</span></div>
+        <div class="mat-row"><span class="code">11</span><span class="chip" style="background:rgb(46,160,60)"></span><span class="name">Plant</span><span class="key">9</span></div>
+        <div class="mat-row"><span class="code">12</span><span class="chip" style="background:rgb(170,210,235)"></span><span class="name">Ice</span><span class="key">0</span></div>
+
+        <div class="cat-label">Energy</div>
+        <div class="mat-row"><span class="code">13</span><span class="chip" style="background:rgb(255,150,40)"></span><span class="name">Fire</span><span class="key">F</span></div>
+        <div class="mat-row"><span class="code">14</span><span class="chip" style="background:rgb(90,90,96)"></span><span class="name">Smoke</span><span class="key">S</span></div>
+        <div class="mat-row" style="padding-bottom:12px"><span class="code">15</span><span class="chip" style="background:rgb(205,210,220)"></span><span class="name">Steam</span><span class="key">T</span></div>
+      </section>
+
+      <!-- ===== CENTER: DISPLAY ===== -->
+      <section class="col">
+        <div class="section-head"><span>Display · CH-A</span><span class="idx">RT</span></div>
+        <div class="stage">
+          <div class="scope">
+            <div class="screen-wrap">
+              <div class="ticks top" aria-hidden="true">
+                <span class="lab" style="left:0%">0</span>
+                <span class="lab" style="left:25%">40</span>
+                <span class="lab" style="left:50%">80</span>
+                <span class="lab" style="left:75%">120</span>
+                <span class="lab" style="left:100%">160</span>
+              </div>
+              <div class="ticks left" aria-hidden="true">
+                <span class="lab" style="top:0%">0</span>
+                <span class="lab" style="top:50%">60</span>
+                <span class="lab" style="top:100%">120</span>
+              </div>
+              <canvas id="sim"></canvas>
+              <div class="scan" aria-hidden="true"></div>
+            </div>
+            <div class="scope-meta">
+              <span>x:<span class="tok">160</span> y:<span class="tok">120</span> · 1px / cell</span>
+              <span>sweep <span class="tok">60Hz</span> · trig AUTO</span>
+            </div>
+          </div>
+
+          <!-- HUD GAUGES -->
+          <div class="hud">
+            <div class="gauge live">
+              <span class="lab">Frame Rate</span>
+              <span class="val">59.0<u> FPS</u></span>
+              <div class="spark" aria-hidden="true">
+                <i style="height:60%"></i><i style="height:80%"></i><i style="height:55%"></i>
+                <i style="height:90%"></i><i style="height:70%"></i><i style="height:100%"></i>
+                <i style="height:65%"></i><i style="height:85%"></i><i style="height:72%"></i>
+                <i style="height:95%"></i><i style="height:78%"></i><i style="height:88%"></i>
+              </div>
+            </div>
+            <div class="gauge">
+              <span class="lab">Particles</span>
+              <span class="val">12,403<u> px</u></span>
+              <div class="spark" aria-hidden="true">
+                <i style="height:40%;background:var(--cyan)"></i><i style="height:55%;background:var(--cyan)"></i>
+                <i style="height:62%;background:var(--cyan)"></i><i style="height:70%;background:var(--cyan)"></i>
+                <i style="height:75%;background:var(--cyan)"></i><i style="height:82%;background:var(--cyan)"></i>
+                <i style="height:88%;background:var(--cyan)"></i><i style="height:92%;background:var(--cyan)"></i>
+                <i style="height:94%;background:var(--cyan)"></i><i style="height:97%;background:var(--cyan)"></i>
+                <i style="height:99%;background:var(--cyan)"></i><i style="height:100%;background:var(--cyan)"></i>
+              </div>
+            </div>
+            <div class="gauge">
+              <span class="lab">Active Specimen</span>
+              <span class="val" style="color:var(--amber)">LAVA</span>
+              <span class="lab" style="margin-top:5px;color:var(--ink-faint)">code 08 · thermal</span>
+            </div>
+          </div>
+
+          <div class="hint">
+            <b>drag</b> to draw <span class="sep">·</span> <b>right-click</b> to erase <span class="sep">·</span> <b>space</b> = pause
+          </div>
+        </div>
+      </section>
+
+      <!-- ===== RIGHT: CONTROLS ===== -->
+      <aside class="col">
+        <div class="section-head"><span>Transport</span><span class="idx">CTL</span></div>
+
+        <div class="ctrl-group">
+          <div class="transport">
+            <button class="btn primary" type="button">
+              <svg viewBox="0 0 12 12" fill="currentColor"><path d="M2 1.5 L10 6 L2 10.5 Z"/></svg>
+              Pause
+            </button>
+            <button class="btn icon" type="button" title="Step">
+              <svg viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="1.3"><path d="M3 2 L8 6 L3 10"/><path d="M9 2 V10"/></svg>
+            </button>
+            <button class="btn icon" type="button" title="Clear">
+              <svg viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="1.3"><path d="M2.5 3.5 H9.5 M4 3.5 V2.5 H8 V3.5 M3.3 3.5 L3.8 10 H8.2 L8.7 3.5"/></svg>
+            </button>
+          </div>
+        </div>
+
+        <div class="section-head"><span>Calibration</span><span class="idx">SET</span></div>
+        <div class="ctrl-group">
+          <div class="field">
+            <div class="head"><span>Brush ⌀</span><span class="read">18 px</span></div>
+            <div class="fader">
+              <div class="track"></div>
+              <div class="ticks-row"></div>
+              <div class="fill" style="width:44%"></div>
+              <div class="knob" style="left:44%"></div>
+              <div class="scale"><span>1</span><span>40</span></div>
+            </div>
+          </div>
+
+          <div class="field">
+            <div class="head"><span>Sim Speed</span><span class="read">2×</span></div>
+            <div class="fader">
+              <div class="track"></div>
+              <div class="ticks-row" style="background-image:repeating-linear-gradient(90deg,var(--rule) 0 1px,transparent 1px calc(100%/5))"></div>
+              <div class="fill" style="width:20%"></div>
+              <div class="knob" style="left:20%"></div>
+              <div class="scale"><span>1×</span><span>6×</span></div>
+            </div>
+          </div>
+        </div>
+
+        <div class="section-head"><span>Render</span><span class="idx">FX</span></div>
+        <div class="ctrl-group">
+          <div class="switch-row">
+            <span class="lab">Glow</span>
+            <span class="switch"><span class="state-on">ON</span><span class="toggle on"></span></span>
+          </div>
+          <div class="switch-row">
+            <span class="lab">Light</span>
+            <span class="switch"><span class="state-off">OFF</span><span class="toggle"></span></span>
+          </div>
+
+          <div class="field is-disabled" style="margin-top:12px">
+            <div class="head"><span>Darkness</span><span class="read" style="color:var(--ink-faint)">— —</span></div>
+            <div class="fader disabled">
+              <div class="track"></div>
+              <div class="ticks-row"></div>
+              <div class="fill" style="width:0%"></div>
+              <div class="knob" style="left:0%"></div>
+              <div class="scale"><span>0</span><span>100</span></div>
+            </div>
+            <div class="disabled-note">▲ requires LIGHT = ON</div>
+          </div>
+        </div>
+      </aside>
+    </div>
+
+    <footer class="footer">
+      <span>POWDER LAB · INSTRUMENT CONSOLE</span>
+      <span>CAL <span style="color:var(--cyan)">OK</span> · 22:41:07 UTC</span>
+    </footer>
+  </main>
+
+  <script src="sand.js"></script>
+  <script>mountSand(document.getElementById('sim'));</script>
+</body>
+</html>

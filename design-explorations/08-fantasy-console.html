@@ -1,0 +1,617 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Powder Lab — Fantasy Console</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&family=Silkscreen:wght@400;700&family=VT323&display=swap" rel="stylesheet" />
+<style>
+  /* ============================================================
+     PICO-8 console palette — chrome uses ONLY these.
+     ============================================================ */
+  :root {
+    --navy:   #1D2B53;
+    --maroon: #7E2553;
+    --green:  #008751;
+    --brown:  #AB5236;
+    --dgrey:  #5F574F;
+    --lgrey:  #C2C3C7;
+    --cream:  #FFF1E8;
+    --red:    #FF004D;
+    --orange: #FFA300;
+    --yellow: #FFEC27;
+    --lime:   #00E436;
+    --blue:   #29ADFF;
+    --lav:    #83769C;
+    --pink:   #FF77A8;
+    --peach:  #FFCCAA;
+    --black:  #1D1A24;
+
+    --px: 4px;
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  html, body { height: 100%; }
+
+  body {
+    background-color: var(--black);
+    /* hard dither floor — checkerboard, no soft fade */
+    background-image:
+      linear-gradient(45deg, var(--navy) 25%, transparent 25% 75%, var(--navy) 75%),
+      linear-gradient(45deg, var(--navy) 25%, transparent 25% 75%, var(--navy) 75%);
+    background-size: 8px 8px;
+    background-position: 0 0, 4px 4px;
+    color: var(--cream);
+    font-family: 'VT323', monospace;
+    display: flex;
+    align-items: flex-start;
+    justify-content: center;
+    padding: 24px 16px 48px;
+    -webkit-font-smoothing: none;
+    image-rendering: pixelated;
+  }
+
+  /* ============================================================
+     CONSOLE BODY — the handheld device
+     ============================================================ */
+  .console {
+    width: 760px;
+    max-width: 100%;
+    background-color: var(--maroon);
+    /* hard pixel bevel: light top-left, dark bottom-right, no blur */
+    box-shadow:
+      inset 4px 4px 0 0 var(--pink),
+      inset -4px -4px 0 0 var(--navy),
+      8px 8px 0 0 var(--black);
+    border: 4px solid var(--black);
+    border-radius: 2px;
+    padding: 16px;
+  }
+
+  /* ---- top bar: wordmark + cartridge tab ---- */
+  .deck-top {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 12px;
+    padding: 0 4px;
+  }
+  .wordmark {
+    font-family: 'Press Start 2P', monospace;
+    font-size: 16px;
+    line-height: 1;
+    color: var(--cream);
+    /* hard 2px offset pixel shadow, blur-radius 0 */
+    text-shadow: 2px 2px 0 var(--black);
+    letter-spacing: 1px;
+  }
+  .wordmark .lab { color: var(--orange); }
+  .cart {
+    display: flex;
+    gap: 4px;
+  }
+  .cart i {
+    display: block;
+    width: 8px;
+    height: 16px;
+    background-color: var(--navy);
+    box-shadow: inset 2px 2px 0 0 var(--lav);
+  }
+  .cart i:nth-child(2) { background-color: var(--orange); box-shadow: inset 2px 2px 0 0 var(--yellow); }
+
+  /* ============================================================
+     SCREEN BEZEL — chunky frame around the live sim
+     ============================================================ */
+  .screen-shell {
+    background-color: var(--black);
+    border: 4px solid var(--dgrey);
+    border-radius: 2px;
+    /* inner bevel reads like a recessed screen */
+    box-shadow:
+      inset 4px 4px 0 0 var(--navy),
+      inset -4px -4px 0 0 var(--lav);
+    padding: 12px;
+    margin-bottom: 16px;
+  }
+  .bezel {
+    background-color: var(--navy);
+    border: 4px solid var(--black);
+    box-shadow: inset 2px 2px 0 0 var(--lav);
+    padding: 4px;
+  }
+  #sim {
+    display: block;
+    width: 100%;
+    max-width: 700px;
+    aspect-ratio: 4 / 3;
+    image-rendering: pixelated;
+    background-color: var(--black);
+  }
+
+  /* ---- HUD: handheld status readout, sits under screen inside shell ---- */
+  .hud {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    margin-top: 12px;
+    font-family: 'Silkscreen', monospace;
+    font-size: 10px;
+    color: var(--lgrey);
+    flex-wrap: wrap;
+  }
+  .hud .chip {
+    background-color: var(--black);
+    border: 2px solid var(--dgrey);
+    padding: 4px 8px;
+    color: var(--lime);
+  }
+  .hud .chip.parts { color: var(--peach); }
+  .hud .hint {
+    color: var(--lav);
+    font-family: 'VT323', monospace;
+    font-size: 14px;
+    margin-left: auto;
+  }
+  .hud .hint b { color: var(--cream); font-weight: 400; }
+
+  /* ============================================================
+     SECTION HEADERS
+     ============================================================ */
+  .section-label {
+    font-family: 'Silkscreen', monospace;
+    font-size: 9px;
+    color: var(--lav);
+    text-transform: uppercase;
+    letter-spacing: 2px;
+    margin: 0 4px 8px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+  .section-label::after {
+    content: "";
+    flex: 1;
+    height: 4px;
+    background-color: var(--navy);
+    box-shadow: inset 0 2px 0 0 var(--black);
+  }
+
+  /* ============================================================
+     PALETTE — grouped material swatches
+     ============================================================ */
+  .palette {
+    background-color: var(--navy);
+    border: 4px solid var(--black);
+    box-shadow: inset 2px 2px 0 0 var(--lav), inset -2px -2px 0 0 var(--black);
+    padding: 12px;
+    margin-bottom: 16px;
+  }
+  .cat { margin-bottom: 12px; }
+  .cat:last-child { margin-bottom: 0; }
+  .cat-name {
+    font-family: 'Silkscreen', monospace;
+    font-size: 8px;
+    color: var(--orange);
+    text-transform: uppercase;
+    letter-spacing: 2px;
+    margin-bottom: 6px;
+  }
+  .mats {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+  .mat {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    background-color: var(--black);
+    border: 2px solid var(--dgrey);
+    padding: 4px 8px 4px 4px;
+    cursor: pointer;
+    position: relative;
+  }
+  .mat .name {
+    font-family: 'VT323', monospace;
+    font-size: 15px;
+    line-height: 1;
+    color: var(--cream);
+  }
+  .mat .key {
+    font-family: 'Silkscreen', monospace;
+    font-size: 8px;
+    color: var(--lav);
+    background-color: var(--navy);
+    border: 2px solid var(--dgrey);
+    padding: 1px 3px;
+    margin-left: 4px;
+  }
+
+  /* swatch = tiny textured pixel tile, 16x16, with 1px inset highlight */
+  .sw {
+    width: 16px;
+    height: 16px;
+    flex: none;
+    image-rendering: pixelated;
+    box-shadow: inset 1px 1px 0 0 rgba(255,255,255,0.35);
+  }
+  /* grainy powder: tiny dither dots */
+  .sw.grain {
+    background-image:
+      linear-gradient(45deg, rgba(0,0,0,0.35) 25%, transparent 25% 75%, rgba(0,0,0,0.35) 75%),
+      linear-gradient(45deg, rgba(255,255,255,0.25) 25%, transparent 25% 75%, rgba(255,255,255,0.25) 75%);
+    background-size: 4px 4px, 4px 4px;
+    background-position: 0 0, 2px 2px;
+  }
+  /* banded liquid: hard horizontal bands */
+  .sw.band {
+    background-image: linear-gradient(
+      to bottom,
+      rgba(255,255,255,0.28) 0 25%,
+      transparent 25% 50%,
+      rgba(0,0,0,0.28) 50% 75%,
+      transparent 75% 100%
+    );
+    background-size: 100% 8px;
+  }
+  /* glowing: hard checkerboard of bright/dark */
+  .sw.glow {
+    background-image:
+      linear-gradient(45deg, rgba(255,255,255,0.45) 25%, transparent 25% 75%, rgba(255,255,255,0.45) 75%),
+      linear-gradient(45deg, rgba(0,0,0,0.30) 25%, transparent 25% 75%, rgba(0,0,0,0.30) 75%);
+    background-size: 4px 4px, 4px 4px;
+    background-position: 0 0, 2px 2px;
+  }
+  /* solid block: hard 2px bevel */
+  .sw.block {
+    box-shadow:
+      inset 2px 2px 0 0 rgba(255,255,255,0.30),
+      inset -2px -2px 0 0 rgba(0,0,0,0.40);
+  }
+  /* eraser: empty crosshatch tile */
+  .sw.empty {
+    background-image:
+      linear-gradient(45deg, var(--dgrey) 25%, transparent 25% 75%, var(--dgrey) 75%);
+    background-size: 4px 4px;
+    box-shadow: inset 1px 1px 0 0 var(--dgrey);
+  }
+
+  /* ACTIVE material (Lava): pixel selection marquee */
+  .mat.active {
+    background-color: var(--maroon);
+    border-color: var(--orange);
+    box-shadow: 0 0 0 2px var(--cream);
+  }
+  .mat.active .name { color: var(--cream); }
+  .mat.active .marq {
+    position: absolute;
+    inset: -4px;
+    pointer-events: none;
+    /* dashed pixel marquee built from hard stops, no blur */
+    background:
+      /* top */ linear-gradient(90deg, var(--orange) 0 4px, transparent 4px 8px) top/8px 2px repeat-x,
+      /* bottom */ linear-gradient(90deg, var(--orange) 0 4px, transparent 4px 8px) bottom/8px 2px repeat-x,
+      /* left */ linear-gradient(0deg, var(--orange) 0 4px, transparent 4px 8px) left/2px 8px repeat-y,
+      /* right */ linear-gradient(0deg, var(--orange) 0 4px, transparent 4px 8px) right/2px 8px repeat-y;
+  }
+
+  /* ============================================================
+     CONTROL DECK
+     ============================================================ */
+  .deck {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 16px;
+  }
+  .panel {
+    background-color: var(--navy);
+    border: 4px solid var(--black);
+    box-shadow: inset 2px 2px 0 0 var(--lav), inset -2px -2px 0 0 var(--black);
+    padding: 12px;
+  }
+  .panel.span { grid-column: 1 / -1; }
+
+  /* ---- pixel buttons ---- */
+  .btn-row { display: flex; gap: 8px; flex-wrap: wrap; }
+  .btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    font-family: 'Silkscreen', monospace;
+    font-size: 10px;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    color: var(--cream);
+    background-color: var(--dgrey);
+    border: none;
+    padding: 8px 12px;
+    cursor: pointer;
+    box-shadow: inset 2px 2px 0 0 var(--lgrey), inset -2px -2px 0 0 var(--black);
+    border-radius: 2px;
+  }
+  .btn:active { box-shadow: inset -2px -2px 0 0 var(--lgrey), inset 2px 2px 0 0 var(--black); }
+  .btn svg { width: 16px; height: 16px; fill: var(--cream); }
+  .btn.primary {
+    background-color: var(--orange);
+    color: var(--black);
+    box-shadow: inset 2px 2px 0 0 var(--yellow), inset -2px -2px 0 0 var(--brown);
+  }
+  .btn.primary svg { fill: var(--black); }
+  .btn.danger { color: var(--red); }
+  .btn.danger svg { fill: var(--red); }
+
+  /* ---- stepped meters (brush / speed) ---- */
+  .meter { margin-bottom: 12px; }
+  .meter:last-child { margin-bottom: 0; }
+  .meter-head {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    font-family: 'Silkscreen', monospace;
+    font-size: 9px;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    color: var(--lgrey);
+    margin-bottom: 6px;
+  }
+  .meter-head .val {
+    font-family: 'VT323', monospace;
+    font-size: 16px;
+    color: var(--orange);
+  }
+  .bars { display: flex; gap: 2px; }
+  .bars i {
+    flex: 1;
+    height: 16px;
+    background-color: var(--black);
+    box-shadow: inset 1px 1px 0 0 var(--dgrey);
+  }
+  .bars i.on { background-color: var(--orange); box-shadow: inset 1px 1px 0 0 var(--yellow); }
+  .bars.speed i.on { background-color: var(--lime); box-shadow: inset 1px 1px 0 0 var(--cream); }
+  .meter .scale {
+    display: flex;
+    justify-content: space-between;
+    font-family: 'Silkscreen', monospace;
+    font-size: 7px;
+    color: var(--lav);
+    margin-top: 4px;
+  }
+
+  /* ---- lit pixel toggles ---- */
+  .toggle-row { display: flex; gap: 12px; flex-wrap: wrap; align-items: stretch; }
+  .toggle {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    background-color: var(--black);
+    border: 2px solid var(--dgrey);
+    padding: 8px;
+    flex: 1;
+    min-width: 120px;
+  }
+  .toggle .lbl {
+    font-family: 'Silkscreen', monospace;
+    font-size: 9px;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    color: var(--cream);
+  }
+  /* the lit "LED" pixel + switch track */
+  .led {
+    width: 12px;
+    height: 12px;
+    flex: none;
+    background-color: var(--dgrey);
+    box-shadow: inset 1px 1px 0 0 var(--black);
+  }
+  .toggle.on .led { background-color: var(--lime); box-shadow: inset 1px 1px 0 0 var(--cream); }
+  .switch {
+    margin-left: auto;
+    width: 28px;
+    height: 14px;
+    background-color: var(--navy);
+    box-shadow: inset 1px 1px 0 0 var(--black);
+    position: relative;
+    flex: none;
+  }
+  .switch::after {
+    content: "";
+    position: absolute;
+    top: 0; left: 0;
+    width: 14px; height: 14px;
+    background-color: var(--dgrey);
+    box-shadow: inset 1px 1px 0 0 var(--lgrey), inset -1px -1px 0 0 var(--black);
+  }
+  .toggle.on .switch::after { left: 14px; background-color: var(--lime); box-shadow: inset 1px 1px 0 0 var(--cream), inset -1px -1px 0 0 var(--green); }
+  .toggle.on .switch { background-color: var(--green); }
+
+  /* disabled (Darkness, because Light is off) */
+  .disabled { opacity: 1; }
+  .disabled .meter-head, .disabled .meter-head .val { color: var(--dgrey); }
+  .disabled .bars i { background-color: var(--navy); box-shadow: inset 1px 1px 0 0 var(--black); }
+  .disabled .bars i.on { background-color: var(--dgrey); box-shadow: inset 1px 1px 0 0 var(--black); }
+  .disabled .scale { color: var(--dgrey); }
+  .disabled-note {
+    font-family: 'VT323', monospace;
+    font-size: 13px;
+    color: var(--dgrey);
+    margin-top: 4px;
+  }
+
+  @media (max-width: 560px) {
+    .deck { grid-template-columns: 1fr; }
+    .wordmark { font-size: 12px; }
+  }
+</style>
+</head>
+<body>
+  <div class="console">
+
+    <!-- top deck: wordmark + cartridge -->
+    <div class="deck-top">
+      <div class="wordmark">POWDER<span class="lab"> LAB</span></div>
+      <div class="cart" aria-hidden="true"><i></i><i></i><i></i></div>
+    </div>
+
+    <!-- ============ SCREEN ============ -->
+    <div class="screen-shell">
+      <div class="bezel">
+        <canvas id="sim"></canvas>
+      </div>
+      <div class="hud">
+        <span class="chip">59 FPS</span>
+        <span class="chip parts">12,403 PARTICLES</span>
+        <span class="hint">drag to draw &middot; <b>right-click</b> to erase &middot; <b>space</b> = pause</span>
+      </div>
+    </div>
+
+    <!-- ============ PALETTE ============ -->
+    <div class="section-label">Materials</div>
+    <div class="palette">
+
+      <div class="cat">
+        <div class="cat-name">Tools</div>
+        <div class="mats">
+          <div class="mat"><span class="sw empty"></span><span class="name">Eraser</span><span class="key">E</span></div>
+          <div class="mat"><span class="sw block" style="background-color:rgb(120,122,130)"></span><span class="name">Wall</span><span class="key">W</span></div>
+        </div>
+      </div>
+
+      <div class="cat">
+        <div class="cat-name">Powders</div>
+        <div class="mats">
+          <div class="mat"><span class="sw grain" style="background-color:rgb(196,180,120)"></span><span class="name">Sand</span><span class="key">1</span></div>
+          <div class="mat"><span class="sw grain" style="background-color:rgb(70,68,78)"></span><span class="name">Gunpowder</span><span class="key">2</span></div>
+        </div>
+      </div>
+
+      <div class="cat">
+        <div class="cat-name">Liquids</div>
+        <div class="mats">
+          <div class="mat"><span class="sw band" style="background-color:rgb(54,108,200)"></span><span class="name">Water</span><span class="key">3</span></div>
+          <div class="mat"><span class="sw band" style="background-color:rgb(78,66,44)"></span><span class="name">Oil</span><span class="key">4</span></div>
+          <div class="mat"><span class="sw band" style="background-color:rgb(120,214,70)"></span><span class="name">Acid</span><span class="key">5</span></div>
+          <div class="mat active"><span class="marq"></span><span class="sw glow" style="background-color:rgb(255,110,30)"></span><span class="name">Lava</span><span class="key">6</span></div>
+        </div>
+      </div>
+
+      <div class="cat">
+        <div class="cat-name">Solids</div>
+        <div class="mats">
+          <div class="mat"><span class="sw block" style="background-color:rgb(98,98,106)"></span><span class="name">Stone</span><span class="key">7</span></div>
+          <div class="mat"><span class="sw block" style="background-color:rgb(112,74,42)"></span><span class="name">Wood</span><span class="key">8</span></div>
+          <div class="mat"><span class="sw block" style="background-color:rgb(46,160,60)"></span><span class="name">Plant</span><span class="key">9</span></div>
+          <div class="mat"><span class="sw block" style="background-color:rgb(170,210,235)"></span><span class="name">Ice</span><span class="key">0</span></div>
+        </div>
+      </div>
+
+      <div class="cat">
+        <div class="cat-name">Energy</div>
+        <div class="mats">
+          <div class="mat"><span class="sw glow" style="background-color:rgb(255,150,40)"></span><span class="name">Fire</span><span class="key">F</span></div>
+          <div class="mat"><span class="sw grain" style="background-color:rgb(90,90,96)"></span><span class="name">Smoke</span><span class="key">S</span></div>
+          <div class="mat"><span class="sw grain" style="background-color:rgb(205,210,220)"></span><span class="name">Steam</span><span class="key">T</span></div>
+        </div>
+      </div>
+
+    </div>
+
+    <!-- ============ CONTROL DECK ============ -->
+    <div class="section-label">Console</div>
+    <div class="deck">
+
+      <!-- transport buttons -->
+      <div class="panel span">
+        <div class="btn-row">
+          <button class="btn primary" type="button">
+            <svg viewBox="0 0 8 8" shape-rendering="crispEdges"><rect x="2" y="1" width="1" height="6"/><rect x="3" y="2" width="1" height="4"/><rect x="4" y="3" width="1" height="2"/></svg>
+            Play / Pause
+          </button>
+          <button class="btn" type="button">
+            <!-- step: arrow into a bar -->
+            <svg viewBox="0 0 8 8" shape-rendering="crispEdges"><rect x="1" y="1" width="1" height="6"/><rect x="2" y="2" width="1" height="4"/><rect x="3" y="3" width="1" height="2"/><rect x="5" y="1" width="2" height="6"/></svg>
+            Step
+          </button>
+          <button class="btn danger" type="button">
+            <!-- clear: X glyph -->
+            <svg viewBox="0 0 8 8" shape-rendering="crispEdges"><rect x="1" y="1" width="1" height="1"/><rect x="2" y="2" width="1" height="1"/><rect x="3" y="3" width="2" height="2"/><rect x="5" y="5" width="1" height="1"/><rect x="6" y="6" width="1" height="1"/><rect x="6" y="1" width="1" height="1"/><rect x="5" y="2" width="1" height="1"/><rect x="2" y="5" width="1" height="1"/><rect x="1" y="6" width="1" height="1"/></svg>
+            Clear
+          </button>
+        </div>
+      </div>
+
+      <!-- brush + speed meters -->
+      <div class="panel">
+        <div class="meter">
+          <div class="meter-head">
+            <span><svg width="16" height="16" viewBox="0 0 8 8" shape-rendering="crispEdges" style="vertical-align:-2px"><rect x="5" y="0" width="3" height="3" fill="var(--lgrey)"/><rect x="2" y="3" width="2" height="2" fill="var(--lgrey)"/><rect x="1" y="5" width="2" height="2" fill="var(--lgrey)"/><rect x="0" y="7" width="2" height="1" fill="var(--lgrey)"/></svg> Brush</span>
+            <span class="val">18</span>
+          </div>
+          <div class="bars" id="brushbars"></div>
+          <div class="scale"><span>1</span><span>40</span></div>
+        </div>
+
+        <div class="meter">
+          <div class="meter-head">
+            <span>Speed</span>
+            <span class="val">2&times;</span>
+          </div>
+          <div class="bars speed" id="speedbars"></div>
+          <div class="scale"><span>1</span><span>6</span></div>
+        </div>
+      </div>
+
+      <!-- toggles -->
+      <div class="panel">
+        <div class="toggle-row">
+          <div class="toggle on">
+            <span class="led"></span>
+            <span class="lbl">Glow</span>
+            <span class="switch"></span>
+          </div>
+          <div class="toggle">
+            <span class="led"></span>
+            <span class="lbl">Light</span>
+            <span class="switch"></span>
+          </div>
+        </div>
+
+        <div class="meter disabled" style="margin-top:12px">
+          <div class="meter-head">
+            <span>Darkness</span>
+            <span class="val">0</span>
+          </div>
+          <div class="bars" id="darkbars"></div>
+          <div class="scale"><span>0</span><span>100</span></div>
+          <div class="disabled-note">&#8212; requires Light: ON</div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <script>
+    // build stepped meter bars (pure presentation, static values)
+    function meter(id, total, on, cls) {
+      const el = document.getElementById(id);
+      for (let k = 0; k < total; k++) {
+        const i = document.createElement('i');
+        if (k < on) i.className = 'on';
+        el.appendChild(i);
+      }
+    }
+    // brush 18/40 -> 18 lit of 20 stepped bars (each ~2 units)
+    meter('brushbars', 20, 9);
+    // speed 2 of 6
+    meter('speedbars', 6, 2);
+    // darkness 0/100 -> disabled, none lit
+    meter('darkbars', 20, 0);
+  </script>
+
+  <script src="sand.js"></script>
+  <script>mountSand(document.getElementById('sim'));</script>
+</body>
+</html>
