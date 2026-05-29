@@ -42,6 +42,7 @@ export class Simulation {
 
   frame = 0
   count = 0
+  emissive = 0 // fire/lava cell count this frame; lets render() skip glow passes
 
   // Dirty-chunk scheduler: only chunks flagged active get simulated.
   readonly chunkW: number
@@ -58,6 +59,9 @@ export class Simulation {
   private offCtx: CanvasRenderingContext2D
   private glowCanvas: HTMLCanvasElement
   private glowCtx: CanvasRenderingContext2D
+  // Scratch canvas (1px per cell) for blurring the glow in SOURCE space.
+  private blurCanvas: HTMLCanvasElement
+  private blurCtx: CanvasRenderingContext2D
 
   constructor(W: number, H: number) {
     this.W = W
@@ -92,6 +96,12 @@ export class Simulation {
     const glowCtx = this.glowCanvas.getContext('2d')
     if (!glowCtx) throw new Error('2d context unavailable for glow canvas')
     this.glowCtx = glowCtx
+    this.blurCanvas = document.createElement('canvas')
+    this.blurCanvas.width = W
+    this.blurCanvas.height = H
+    const blurCtx = this.blurCanvas.getContext('2d')
+    if (!blurCtx) throw new Error('2d context unavailable for blur canvas')
+    this.blurCtx = blurCtx
   }
 
   // ---- low-level cell ops ------------------------------------------------
@@ -602,6 +612,7 @@ export class Simulation {
     const { W, H, cells, life, extra, buf32, glow32 } = this
     const n = W * H
     let count = 0
+    let emissive = 0
     for (let i = 0; i < n; i++) {
       const m = cells[i]
       if (m === Mat.EMPTY) {
@@ -612,9 +623,41 @@ export class Simulation {
       count++
       const c = this.colorOf(m, life[i], extra[i])
       buf32[i] = c
-      glow32[i] = m === Mat.FIRE || m === Mat.LAVA ? c : 0
+      if (m === Mat.FIRE || m === Mat.LAVA) {
+        glow32[i] = c
+        emissive++
+      } else {
+        glow32[i] = 0
+      }
     }
     this.count = count
+    this.emissive = emissive
+  }
+
+  /**
+   * blur the emissive buffer in SOURCE space (the small W×H glow canvas) and
+   * composite it onto `ctx` upscaled. blurring 200×150 at radius/scale is ~16×
+   * fewer pixels with a ¼-size kernel versus blurring the full-res canvas, and
+   * matters because Firefox's canvas2D blur runs on the CPU (Chrome's is GPU).
+   * the upscale uses bilinear smoothing so the small blur reads as a smooth
+   * gradient rather than blocky cells.
+   */
+  private glowPass(
+    ctx: CanvasRenderingContext2D,
+    w: number,
+    h: number,
+    scale: number,
+    screenBlur: number,
+    alpha: number,
+  ): void {
+    const { W, H, blurCtx, blurCanvas, glowCanvas } = this
+    const radius = Math.max(0.5, screenBlur / scale)
+    blurCtx.clearRect(0, 0, W, H)
+    blurCtx.filter = `blur(${radius}px)`
+    blurCtx.drawImage(glowCanvas, 0, 0)
+    blurCtx.filter = 'none'
+    ctx.globalAlpha = alpha
+    ctx.drawImage(blurCanvas, 0, 0, w, h)
   }
 
   render(
@@ -631,9 +674,10 @@ export class Simulation {
       h = this.H * scale
     ctx.drawImage(this.off, 0, 0, w, h)
 
-    // both the bloom and lighting passes draw from the emissive (fire/lava)
-    // buffer, so upload it once if either is on.
-    if (glow || light) this.glowCtx.putImageData(this.glowData, 0, 0)
+    // the additive glow passes draw from the emissive (fire/lava) buffer; with
+    // nothing emissive there's nothing to flood, so skip uploading it entirely.
+    const hasLight = this.emissive > 0
+    if ((glow || light) && hasLight) this.glowCtx.putImageData(this.glowData, 0, 0)
 
     // dynamic lighting: dim the whole scene toward black, then flood additive
     // radiance from emissive cells so light sources reveal their surroundings.
@@ -648,29 +692,25 @@ export class Simulation {
       }
       // stacked blur radii approximate a long-tailed falloff: a tight hot core
       // (also keeps sources bright after the multiply-darken when bloom is off),
-      // a mid spread, and a far reach.
-      ctx.save()
-      ctx.globalCompositeOperation = 'lighter'
-      const passes = [
-        { blur: Math.max(2, scale), alpha: 0.9 },
-        { blur: scale * 6, alpha: 0.6 },
-        { blur: scale * 12, alpha: 0.4 },
-      ]
-      for (const p of passes) {
-        ctx.globalAlpha = p.alpha
-        ctx.filter = `blur(${p.blur}px)`
-        ctx.drawImage(this.glowCanvas, 0, 0, w, h)
+      // a mid spread, and a far reach. radii are screen-space; glowPass scales
+      // them down to source space.
+      if (hasLight) {
+        ctx.save()
+        ctx.globalCompositeOperation = 'lighter'
+        ctx.imageSmoothingEnabled = true
+        this.glowPass(ctx, w, h, scale, Math.max(2, scale), 0.9)
+        this.glowPass(ctx, w, h, scale, scale * 6, 0.6)
+        this.glowPass(ctx, w, h, scale, scale * 12, 0.4)
+        ctx.restore()
       }
-      ctx.restore()
     }
 
     // bloom: tight additive halo on the source cores (independent of lighting).
-    if (glow) {
+    if (glow && hasLight) {
       ctx.save()
       ctx.globalCompositeOperation = 'lighter'
-      ctx.filter = `blur(${Math.max(2, scale)}px)`
-      ctx.globalAlpha = 0.85
-      ctx.drawImage(this.glowCanvas, 0, 0, w, h)
+      ctx.imageSmoothingEnabled = true
+      this.glowPass(ctx, w, h, scale, Math.max(2, scale), 0.85)
       ctx.restore()
     }
   }
