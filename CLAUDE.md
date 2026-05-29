@@ -110,30 +110,32 @@ bd close <id>         # Complete work
 - Use `bd` for ALL task tracking — do NOT use TodoWrite, TaskCreate, or markdown TODO lists
 - Run `bd prime` for detailed command reference and session close protocol
 
-**Architecture in one line:** issues live in a local Dolt DB; sync uses `refs/dolt/data` on your git remote; `.beads/issues.jsonl` is a passive export. See https://github.com/gastownhall/beads/blob/main/docs/SYNC_CONCEPTS.md for details and anti-patterns.
-
-## Session Completion
-
-**When ending a work session**, you MUST complete ALL steps below. Work is NOT complete until `git push` succeeds.
-
-**MANDATORY WORKFLOW:**
-
-1. **File issues for remaining work** - Create issues for anything that needs follow-up
-2. **Run quality gates** (if code changed) - Tests, linters, builds
-3. **Update issue status** - Close finished work, update in-progress items
-4. **PUSH TO REMOTE** - This is MANDATORY:
-   ```bash
-   git pull --rebase
-   git push
-   git status  # MUST show "up to date with origin"
-   ```
-5. **Clean up** - Clear stashes, prune remote branches
-6. **Verify** - All changes committed AND pushed
-7. **Hand off** - Provide context for next session
-
-**CRITICAL RULES:**
-- Work is NOT complete until `git push` succeeds
-- NEVER stop before pushing - that leaves work stranded locally
-- NEVER say "ready to push when you are" - YOU must push
-- If push fails, resolve and retry until it succeeds
+**Architecture in one line:** issues live in a local Dolt DB; `.beads/issues.jsonl` is a git-tracked export kept in sync by the project git hooks. Commit `issues.jsonl` with related work; **do not push** unless explicitly asked.
 <!-- END BEADS INTEGRATION -->
+
+## Issue conventions (bd)
+
+How we organize bd issues in this repo. Following these keeps the graph queryable — the point is that `bd query label:perf` or "what blocks this" return complete, trustworthy answers.
+
+**Hierarchy — one level.** Epics are thematic buckets; everything else is a child issue. No epics-of-epics. If an issue sprouts sub-work, prefer a checklist in its acceptance criteria over nesting. Current epics:
+- **Powder Lab feature roadmap** — user-facing features + engine work
+- **DX & tooling** — developer-experience and maintenance chores
+
+**Dependency types — one meaning each (don't blur them):**
+- `parent-child` — structural grouping (epic → its issues)
+- `blocks` — hard ordering; B can't start until A is done
+- `discovered-from` — provenance; found while working on another issue
+- `related` — soft "see also", no ordering
+
+**Priority — be honest, not everything is P1:**
+- **P0** critical/broken (rare) · **P1** next up / clear win · **P2** solid, real intent to do · **P3** ambitious/someday · **P4** parked (add a *"don't do until X"* note)
+
+**Types used literally:** `feature` (user-facing) · `bug` (defect) · `chore` (maintenance/DX) · `task` (internal work) · `epic` (bucket).
+
+**Labels — cross-cutting themes only, from this fixed set.** Never invent a label ad-hoc; add it to this list first. Types already cover bug/feature and epics cover grouping, so labels stay orthogonal.
+- `dx` — tooling / developer-experience / CI
+- `perf` — performance work
+
+**Descriptions carry the context.** Each issue's description states **why** it matters, the **approach / where in code** (`file:line` when known), and **acceptance** (what "done" looks like) — so it's grabbable months later. `bd lint` flags thin ones.
+
+**Keep `bd ready` a real menu.** Non-actionable work is either P4 or sits behind a `blocks` edge with the gate noted, so everything in `bd ready` is something you could actually start now.
