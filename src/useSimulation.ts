@@ -7,6 +7,8 @@ export interface SimUiState {
   material: number
   brush: number
   glow: boolean
+  light: boolean
+  darkness: number
   speed: number
   fps: number
   count: number
@@ -19,13 +21,23 @@ interface Config {
   material: number
   brush: number
   glow: boolean
+  light: boolean
+  darkness: number
   speed: number
 }
 
 export function useSimulation(W: number, H: number, scale: number) {
   const canvasRef = useRef<HTMLCanvasElement | null>(null)
   const simRef = useRef<Simulation | null>(null)
-  const cfg = useRef<Config>({ running: true, material: Mat.SAND, brush: 4, glow: true, speed: 1 })
+  const cfg = useRef<Config>({
+    running: true,
+    material: Mat.SAND,
+    brush: 4,
+    glow: true,
+    light: true,
+    darkness: 0.55,
+    speed: 1,
+  })
 
   // Pointer state, also outside React so the loop can read it for "faucet" mode.
   const pointer = useRef({ down: false, erase: false, x: 0, y: 0 })
@@ -35,6 +47,8 @@ export function useSimulation(W: number, H: number, scale: number) {
     material: Mat.SAND,
     brush: 4,
     glow: true,
+    light: true,
+    darkness: 0.55,
     speed: 1,
     fps: 0,
     count: 0,
@@ -106,7 +120,7 @@ export function useSimulation(W: number, H: number, scale: number) {
       if (c.running) sim.step(c.speed)
       // "Faucet": holding the pointer still keeps emitting (great for fluids/fire).
       if (pointer.current.down) paintAt(pointer.current.x, pointer.current.y)
-      sim.render(ctx, scale, c.glow)
+      sim.render(ctx, scale, c.glow, c.light, c.darkness)
       frames++
       if (now - fpsT > 500) {
         const fps = Math.round((frames * 1000) / (now - fpsT))
@@ -149,6 +163,14 @@ export function useSimulation(W: number, H: number, scale: number) {
     cfg.current.glow = !cfg.current.glow
     setUi((u) => ({ ...u, glow: cfg.current.glow }))
   }, [])
+  const toggleLight = useCallback(() => {
+    cfg.current.light = !cfg.current.light
+    setUi((u) => ({ ...u, light: cfg.current.light }))
+  }, [])
+  const setDarkness = useCallback((d: number) => {
+    cfg.current.darkness = d
+    setUi((u) => ({ ...u, darkness: d }))
+  }, [])
   const stepOnce = useCallback(() => simRef.current?.step(1), [])
   const clear = useCallback(() => simRef.current?.clear(), [])
 
@@ -170,6 +192,10 @@ export function useSimulation(W: number, H: number, scale: number) {
         toggleGlow()
         return
       }
+      if (k === 'l') {
+        toggleLight()
+        return
+      }
       if (k === '[') {
         setBrush(Math.max(1, cfg.current.brush - 1))
         return
@@ -183,7 +209,7 @@ export function useSimulation(W: number, H: number, scale: number) {
     }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
-  }, [toggleRunning, clear, toggleGlow, setBrush, setMaterial])
+  }, [toggleRunning, clear, toggleGlow, toggleLight, setBrush, setMaterial])
 
   return {
     canvasRef,
@@ -193,6 +219,8 @@ export function useSimulation(W: number, H: number, scale: number) {
     setSpeed,
     toggleRunning,
     toggleGlow,
+    toggleLight,
+    setDarkness,
     stepOnce,
     clear,
   }

@@ -15,6 +15,8 @@ export default function App() {
     setSpeed,
     toggleRunning,
     toggleGlow,
+    toggleLight,
+    setDarkness,
     stepOnce,
     clear,
   } = useSimulation(W, H, SCALE)
@@ -63,7 +65,7 @@ export default function App() {
             <span>{ui.fps} fps</span>
             <span>{ui.count.toLocaleString()} particles</span>
             <span className="hint">
-              drag to draw · right-click to erase · space = pause · C = clear
+              drag to draw · right-click to erase · space = pause · C = clear · G = glow · L = light
             </span>
           </div>
         </main>
@@ -107,6 +109,23 @@ export default function App() {
         <button className={`ctl toggle${ui.glow ? ' on' : ''}`} onClick={toggleGlow}>
           ✨ Glow {ui.glow ? 'on' : 'off'}
         </button>
+
+        <button className={`ctl toggle${ui.light ? ' on' : ''}`} onClick={toggleLight}>
+          💡 Light {ui.light ? 'on' : 'off'}
+        </button>
+
+        <label className="slider">
+          Darkness
+          <input
+            type="range"
+            min={0}
+            max={100}
+            value={Math.round(ui.darkness * 100)}
+            disabled={!ui.light}
+            onChange={(e) => setDarkness(Number(e.target.value) / 100)}
+          />
+          <span className="val">{Math.round(ui.darkness * 100)}</span>
+        </label>
       </footer>
     </div>
   )

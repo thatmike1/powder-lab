@@ -585,19 +585,60 @@ export class Simulation {
     this.count = count
   }
 
-  render(ctx: CanvasRenderingContext2D, scale: number, glow: boolean): void {
+  render(
+    ctx: CanvasRenderingContext2D,
+    scale: number,
+    glow: boolean,
+    light: boolean,
+    darkness: number,
+  ): void {
     this.writeImage()
     this.offCtx.putImageData(this.imageData, 0, 0)
     ctx.imageSmoothingEnabled = false
-    ctx.drawImage(this.off, 0, 0, this.W * scale, this.H * scale)
+    const w = this.W * scale,
+      h = this.H * scale
+    ctx.drawImage(this.off, 0, 0, w, h)
 
+    // both the bloom and lighting passes draw from the emissive (fire/lava)
+    // buffer, so upload it once if either is on.
+    if (glow || light) this.glowCtx.putImageData(this.glowData, 0, 0)
+
+    // dynamic lighting: dim the whole scene toward black, then flood additive
+    // radiance from emissive cells so light sources reveal their surroundings.
+    if (light) {
+      if (darkness > 0) {
+        ctx.save()
+        ctx.globalCompositeOperation = 'multiply'
+        const v = Math.round(255 * (1 - darkness))
+        ctx.fillStyle = `rgb(${v},${v},${v})`
+        ctx.fillRect(0, 0, w, h)
+        ctx.restore()
+      }
+      // stacked blur radii approximate a long-tailed falloff: a tight hot core
+      // (also keeps sources bright after the multiply-darken when bloom is off),
+      // a mid spread, and a far reach.
+      ctx.save()
+      ctx.globalCompositeOperation = 'lighter'
+      const passes = [
+        { blur: Math.max(2, scale), alpha: 0.9 },
+        { blur: scale * 6, alpha: 0.6 },
+        { blur: scale * 12, alpha: 0.4 },
+      ]
+      for (const p of passes) {
+        ctx.globalAlpha = p.alpha
+        ctx.filter = `blur(${p.blur}px)`
+        ctx.drawImage(this.glowCanvas, 0, 0, w, h)
+      }
+      ctx.restore()
+    }
+
+    // bloom: tight additive halo on the source cores (independent of lighting).
     if (glow) {
-      this.glowCtx.putImageData(this.glowData, 0, 0)
       ctx.save()
       ctx.globalCompositeOperation = 'lighter'
       ctx.filter = `blur(${Math.max(2, scale)}px)`
       ctx.globalAlpha = 0.85
-      ctx.drawImage(this.glowCanvas, 0, 0, this.W * scale, this.H * scale)
+      ctx.drawImage(this.glowCanvas, 0, 0, w, h)
       ctx.restore()
     }
   }
