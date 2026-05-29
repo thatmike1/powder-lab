@@ -1,259 +1,660 @@
+/* ===========================================================
+   POWDER LAB — pixel-native chrome
+   Implements DESIGN.md against the approved 10-hybrid mock.
+   PIXEL LAWS: --px:4px grid · no blur · hard 0-radius shadows ·
+   dither only via hard-stop gradients · crisp pixel SVG icons.
+   =========================================================== */
+
 :root {
-  --bg: #0c0e12;
-  --panel: #14171d;
-  --panel-2: #1b1f27;
-  --line: #262b35;
-  --text: #e6e9ef;
-  --muted: #8b93a3;
-  --accent: #ffb347;
-  --accent-2: #4a8cff;
+  --px: 4px;
+
+  /* warm-dark neutral ramp (hue ~60, low chroma) */
+  --ground: oklch(0.18 0.012 60);
+  --ground-d: oklch(0.12 0.01 60);
+  --panel: oklch(0.24 0.012 60);
+  --raised: oklch(0.285 0.013 60);
+  --raised-2: oklch(0.32 0.013 60);
+  --raised-3: oklch(0.36 0.013 60);
+  --hairline: oklch(0.34 0.014 60);
+  --text: oklch(0.91 0.012 85);
+  --muted: oklch(0.66 0.012 75);
+  --dim: oklch(0.46 0.012 70);
+
+  /* depth helpers — hard pixel bevels, never soft shadow */
+  --shadow: oklch(0.1 0.01 60);
+  --inset-hi: oklch(0.4 0.013 60);
+  --inset-lo: oklch(0.14 0.01 60);
+
+  /* accent = the selected material's color; overridden live on .app.
+     defaults to lava orange (the reference accent). */
+  --accent: rgb(255, 110, 30);
+  --accent-dk: rgb(150, 58, 12);
+  --accent-lt: rgb(255, 170, 90);
+
+  /* speed meter uses acid green so it reads apart from the brush meter */
+  --acid: rgb(120, 214, 70);
+
   color-scheme: dark;
 }
 
 * {
   box-sizing: border-box;
+  margin: 0;
+  padding: 0;
 }
 
-html,
-body,
-#root {
+html {
   height: 100%;
-  margin: 0;
+}
+body {
+  min-height: 100%;
 }
 
 body {
-  background: radial-gradient(1200px 700px at 70% -10%, #1a1f2b 0%, var(--bg) 60%);
+  background-color: var(--ground-d);
   color: var(--text);
-  font:
-    14px / 1.4 ui-sans-serif,
-    system-ui,
-    -apple-system,
-    "Segoe UI",
-    Roboto,
-    sans-serif;
-  -webkit-font-smoothing: antialiased;
+  font-family: "JetBrains Mono", ui-monospace, monospace;
+  /* the dim warm checker "desktop" the window sits on */
+  background-image:
+    linear-gradient(45deg, oklch(0.1 0.01 60) 25%, transparent 25% 75%, oklch(0.1 0.01 60) 75%),
+    linear-gradient(45deg, oklch(0.1 0.01 60) 25%, transparent 25% 75%, oklch(0.1 0.01 60) 75%);
+  background-size: 8px 8px;
+  background-position:
+    0 0,
+    4px 4px;
+  -webkit-font-smoothing: none;
+  font-smooth: never;
 }
 
+#root {
+  min-height: 100%;
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+  padding: calc(var(--px) * 6);
+}
+
+/* ---------- the application window (lifted, hard drop shadow) ---------- */
 .app {
-  height: 100%;
-  display: flex;
-  flex-direction: column;
-  max-width: 1100px;
-  margin: 0 auto;
-  padding: 18px 20px 14px;
+  width: 100%;
+  max-width: 1180px;
+  background: var(--panel);
+  border: var(--px) solid var(--hairline);
+  box-shadow: calc(var(--px) * 3) calc(var(--px) * 3) 0 var(--shadow);
 }
 
-/* ---- header ---- */
-.topbar h1 {
-  margin: 0;
-  font-size: 26px;
-  font-weight: 700;
-  letter-spacing: -0.02em;
-}
-.flask {
-  filter: drop-shadow(0 0 10px rgba(255, 179, 71, 0.5));
-}
-.tagline {
-  margin: 2px 0 14px;
-  color: var(--muted);
-  font-size: 13px;
-}
-
-/* ---- layout ---- */
-.layout {
-  display: flex;
-  gap: 16px;
-  flex: 1;
-  min-height: 0;
-}
-
-/* ---- sidebar / palette ---- */
-.sidebar {
-  width: 188px;
-  flex: 0 0 auto;
-  overflow-y: auto;
-  padding-right: 4px;
-}
-.group {
-  margin-bottom: 14px;
-}
-.group h2 {
-  margin: 0 0 6px;
-  font-size: 11px;
-  font-weight: 600;
-  text-transform: uppercase;
-  letter-spacing: 0.08em;
-  color: var(--muted);
-}
-.swatches {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-}
-.swatch {
+/* ---------- titlebar ---------- */
+.titlebar {
   display: flex;
   align-items: center;
-  gap: 9px;
-  padding: 6px 8px;
-  border: 1px solid var(--line);
-  border-radius: 9px;
+  gap: calc(var(--px) * 2);
+  height: calc(var(--px) * 10);
+  padding: 0 calc(var(--px) * 4);
+  background: var(--raised);
+  border-bottom: var(--px) solid var(--hairline);
+}
+.titlebar .wordmark {
+  font-family: "Press Start 2P", monospace;
+  font-size: 15px;
+  color: var(--text);
+  text-shadow: 2px 2px 0 var(--accent-dk);
+  line-height: 1;
+  letter-spacing: 1px;
+  flex: 1;
+}
+.titlebar .wordmark b {
+  color: var(--accent);
+}
+.winctl {
+  display: flex;
+  gap: calc(var(--px) * 1.5);
+}
+.winctl button {
+  width: calc(var(--px) * 6);
+  height: calc(var(--px) * 5);
+  background: var(--raised-2);
+  border: 1px solid var(--hairline);
+  cursor: pointer;
+  display: grid;
+  place-items: center;
+  color: var(--muted);
+  box-shadow: inset 1px 1px 0 var(--inset-hi);
+  transition: background 0.1s ease-out, color 0.1s ease-out;
+}
+.winctl button:hover {
+  background: var(--accent-dk);
+  color: var(--text);
+}
+.winctl button:active {
+  box-shadow: inset 1px 1px 0 var(--inset-lo);
+  transform: translate(1px, 1px);
+}
+.winctl button svg {
+  display: block;
+}
+
+/* ---------- window body: left rail | stage ---------- */
+.body {
+  display: grid;
+  grid-template-columns: calc(var(--px) * 66) 1fr;
+}
+
+/* ============================================================
+   LEFT SIDEBAR — materials palette
+   ============================================================ */
+.rail {
   background: var(--panel);
+  border-right: var(--px) solid var(--hairline);
+  padding: calc(var(--px) * 4);
+  display: flex;
+  flex-direction: column;
+  gap: calc(var(--px) * 4);
+}
+.group {
+  display: flex;
+  flex-direction: column;
+  gap: calc(var(--px) * 2);
+}
+.group > .ghead {
+  font-family: "Silkscreen", monospace;
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 2px;
+  color: var(--muted);
+  display: flex;
+  align-items: center;
+  gap: calc(var(--px) * 2);
+}
+.group > .ghead::after {
+  content: "";
+  flex: 1;
+  height: 2px;
+  background-image: repeating-linear-gradient(to right, var(--hairline) 0 4px, transparent 4px 8px);
+}
+
+.swatch-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: calc(var(--px) * 2);
+}
+
+/* a textured material tile */
+.tile {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: calc(var(--px) * 2);
+  padding: calc(var(--px) * 2);
+  background: var(--raised);
+  border: 1px solid var(--hairline);
   color: var(--text);
   cursor: pointer;
   text-align: left;
-  transition:
-    border-color 0.12s,
-    background 0.12s,
-    transform 0.06s;
+  box-shadow: inset 1px 1px 0 var(--inset-hi);
+  transition: background 0.1s ease-out;
 }
-.swatch:hover {
-  background: var(--panel-2);
-  border-color: #36404f;
+.tile:hover {
+  background: var(--raised-2);
 }
-.swatch:active {
-  transform: translateY(1px);
-}
-.swatch.active {
-  border-color: var(--accent);
-  box-shadow:
-    0 0 0 1px var(--accent),
-    0 0 14px rgba(255, 179, 71, 0.18);
-}
-.dot {
-  width: 16px;
-  height: 16px;
-  border-radius: 5px;
-  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.12);
+.tile .chip {
+  width: calc(var(--px) * 6);
+  height: calc(var(--px) * 6);
   flex: 0 0 auto;
+  border: 1px solid var(--inset-lo);
+  box-shadow: inset 1px 1px 0 rgba(255, 255, 255, 0.2);
 }
-.label {
+.tile .meta {
+  display: flex;
+  flex-direction: column;
+  gap: var(--px);
+  min-width: 0;
   flex: 1;
-  font-size: 13px;
 }
-.swatch kbd {
-  font:
-    10px ui-monospace,
-    monospace;
+.tile .mname {
+  font-family: "Silkscreen", monospace;
+  font-size: 11px;
+  color: var(--text);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: clip;
+  line-height: 1;
+}
+kbd {
+  font-family: "Silkscreen", monospace;
+  font-size: 9px;
   color: var(--muted);
-  background: #0d1014;
-  border: 1px solid var(--line);
-  border-radius: 4px;
-  padding: 1px 5px;
+  background: var(--ground-d);
+  border: 1px solid var(--hairline);
+  padding: 2px 4px;
+  align-self: flex-start;
+  line-height: 1;
+  box-shadow: 1px 1px 0 var(--inset-lo);
 }
 
-/* ---- stage / canvas ---- */
+/* ACTIVE tile — accent fill + marching pixel marquee */
+.tile.active {
+  background: var(--accent-dk);
+  border-color: var(--accent);
+  box-shadow:
+    inset 0 0 0 1px var(--accent-lt),
+    2px 2px 0 var(--shadow);
+}
+.tile.active .mname {
+  color: var(--accent-lt);
+}
+.tile.active kbd {
+  color: var(--accent-lt);
+  border-color: var(--accent);
+  background: var(--accent-dk);
+}
+.tile.active::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background:
+    repeating-linear-gradient(90deg, var(--accent-lt) 0 3px, transparent 3px 6px) top / 100% 1px no-repeat,
+    repeating-linear-gradient(90deg, var(--accent-lt) 0 3px, transparent 3px 6px) bottom / 100% 1px no-repeat,
+    repeating-linear-gradient(0deg, var(--accent-lt) 0 3px, transparent 3px 6px) left / 1px 100% no-repeat,
+    repeating-linear-gradient(0deg, var(--accent-lt) 0 3px, transparent 3px 6px) right / 1px 100% no-repeat;
+  animation: march 0.5s steps(6) infinite;
+}
+@keyframes march {
+  to {
+    background-position:
+      top 0 left 6px,
+      bottom 0 right 6px,
+      left 0 top 6px,
+      right 0 bottom 6px;
+  }
+}
+
+/* ============================================================
+   STAGE — canvas on the checker mat
+   ============================================================ */
 .stage {
-  flex: 1;
+  display: flex;
+  flex-direction: column;
+  background: var(--ground);
   min-width: 0;
+}
+.mat {
+  flex: 1;
+  position: relative;
+  padding: calc(var(--px) * 8);
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 8px;
+  gap: calc(var(--px) * 3);
+  /* classic editor transparency checker */
+  background-color: oklch(0.215 0.01 60);
+  background-image:
+    linear-gradient(45deg, oklch(0.265 0.01 60) 25%, transparent 25% 75%, oklch(0.265 0.01 60) 75%),
+    linear-gradient(45deg, oklch(0.265 0.01 60) 25%, transparent 25% 75%, oklch(0.265 0.01 60) 75%);
+  background-size: 20px 20px;
+  background-position:
+    0 0,
+    10px 10px;
+}
+
+.hud {
+  align-self: stretch;
+  display: flex;
+  align-items: center;
+  gap: calc(var(--px) * 2);
+  font-family: "Silkscreen", monospace;
+  font-size: 11px;
+}
+.hud .stat {
+  background: var(--raised);
+  border: 1px solid var(--hairline);
+  padding: calc(var(--px) * 1.5) calc(var(--px) * 2.5);
+  color: var(--text);
+  box-shadow: 1px 1px 0 var(--inset-lo);
+  line-height: 1;
+}
+.hud .stat b {
+  font-family: "JetBrains Mono", monospace;
+  font-weight: 600;
+  color: var(--accent);
+  font-variant-numeric: tabular-nums;
+}
+.hud .stat.fps b {
+  color: var(--acid);
+}
+
+.canvas-frame {
+  width: 100%;
+  max-width: 880px;
+  border: var(--px) solid var(--hairline);
+  box-shadow:
+    inset 1px 1px 0 var(--raised-3),
+    calc(var(--px) * 2) calc(var(--px) * 2) 0 var(--shadow);
+  background: #000;
+  line-height: 0;
 }
 .sim {
+  display: block;
   width: 100%;
-  max-width: 800px;
-  height: auto;
+  max-width: 880px;
   aspect-ratio: 4 / 3;
   image-rendering: pixelated;
-  border-radius: 12px;
-  border: 1px solid var(--line);
-  background: #101418;
-  box-shadow:
-    0 18px 50px rgba(0, 0, 0, 0.5),
-    inset 0 0 0 1px rgba(255, 255, 255, 0.02);
   touch-action: none;
   cursor: crosshair;
 }
-.hud {
-  display: flex;
-  gap: 16px;
-  align-items: center;
-  width: 100%;
-  max-width: 800px;
-  color: var(--muted);
+
+.hint {
+  font-family: "JetBrains Mono", monospace;
   font-size: 12px;
-  font-variant-numeric: tabular-nums;
+  color: var(--muted);
+  text-align: center;
 }
-.hud .hint {
-  margin-left: auto;
-  opacity: 0.8;
+.hint b {
+  color: var(--text);
+  font-weight: 600;
 }
 
-/* ---- controls ---- */
-.controls {
+/* ============================================================
+   BOTTOM CONTROL BAR
+   ============================================================ */
+.toolbar {
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: calc(var(--px) * 5);
+  padding: calc(var(--px) * 4);
+  background: var(--raised);
+  border-top: var(--px) solid var(--hairline);
   flex-wrap: wrap;
-  margin-top: 14px;
-  padding: 12px 14px;
-  background: var(--panel);
-  border: 1px solid var(--line);
-  border-radius: 12px;
 }
-.ctl {
-  padding: 8px 14px;
-  border: 1px solid var(--line);
-  border-radius: 9px;
-  background: var(--panel-2);
+.cluster {
+  display: flex;
+  align-items: center;
+  gap: calc(var(--px) * 2);
+}
+.divider {
+  width: 2px;
+  align-self: stretch;
+  margin: 0 var(--px);
+  background-image: repeating-linear-gradient(to bottom, var(--hairline) 0 4px, transparent 4px 8px);
+}
+
+/* ---- pixel buttons (hard bevel highlights) ---- */
+.btn {
+  display: inline-flex;
+  align-items: center;
+  gap: calc(var(--px) * 2);
+  height: calc(var(--px) * 10);
+  padding: 0 calc(var(--px) * 4);
+  background: var(--raised-2);
+  border: 1px solid var(--hairline);
   color: var(--text);
   cursor: pointer;
-  font-size: 13px;
-  font-weight: 500;
-  transition:
-    background 0.12s,
-    border-color 0.12s,
-    opacity 0.12s;
+  font-family: "Silkscreen", monospace;
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  box-shadow:
+    inset 2px 2px 0 var(--inset-hi),
+    inset -2px -2px 0 var(--inset-lo),
+    2px 2px 0 var(--shadow);
 }
-.ctl:hover:not(:disabled) {
-  background: #232834;
-  border-color: #36404f;
+.btn:hover:not(:disabled) {
+  background: var(--raised-3);
 }
-.ctl:disabled {
+.btn:active:not(:disabled) {
+  box-shadow:
+    inset -2px -2px 0 var(--inset-hi),
+    inset 2px 2px 0 var(--inset-lo);
+  transform: translate(1px, 1px);
+}
+.btn:disabled {
   opacity: 0.4;
   cursor: not-allowed;
 }
-.ctl.primary {
-  background: linear-gradient(180deg, #ffc266, var(--accent));
-  border-color: #d98f1f;
-  color: #1a1206;
-  font-weight: 600;
+.btn svg {
+  display: block;
 }
-.ctl.toggle.on {
-  border-color: var(--accent-2);
-  box-shadow: 0 0 0 1px var(--accent-2);
-  color: #cfe0ff;
+.btn.icon-only {
+  padding: 0;
+  width: calc(var(--px) * 10);
+  justify-content: center;
 }
-.slider {
+.btn.primary {
+  background: var(--accent);
+  color: oklch(0.18 0.02 50);
+  border-color: var(--accent-lt);
+  box-shadow:
+    inset 2px 2px 0 var(--accent-lt),
+    inset -2px -2px 0 var(--accent-dk),
+    2px 2px 0 var(--shadow);
+}
+.btn.primary:hover {
+  background: var(--accent-lt);
+}
+.btn.primary:active {
+  box-shadow:
+    inset -2px -2px 0 var(--accent-lt),
+    inset 2px 2px 0 var(--accent-dk);
+  transform: translate(1px, 1px);
+}
+
+/* ---- stepped meters / sliders ---- */
+.meter {
   display: flex;
+  flex-direction: column;
+  gap: calc(var(--px) * 1.5);
+  min-width: calc(var(--px) * 40);
+}
+.meter-head {
+  display: flex;
+  justify-content: space-between;
   align-items: center;
-  gap: 8px;
-  font-size: 12px;
+  gap: calc(var(--px) * 2);
+  font-family: "Silkscreen", monospace;
+  font-size: 9px;
+  text-transform: uppercase;
+  letter-spacing: 1px;
   color: var(--muted);
 }
-.slider input[type="range"] {
-  width: 110px;
-  accent-color: var(--accent);
+.meter-head .lbl {
+  display: inline-flex;
+  align-items: center;
+  gap: calc(var(--px) * 1.5);
 }
-.slider .val {
-  min-width: 26px;
-  color: var(--text);
+.meter-head .lbl svg {
+  display: block;
+  fill: var(--muted);
+}
+.meter-head .val {
+  font-family: "JetBrains Mono", monospace;
+  font-weight: 600;
+  font-size: 13px;
+  color: var(--accent);
   font-variant-numeric: tabular-nums;
 }
 
-@media (max-width: 720px) {
-  .layout {
-    flex-direction: column;
+/* the bars are decorative; a transparent native range input sits on top and
+   owns drag + keyboard interaction. */
+.bars-wrap {
+  position: relative;
+}
+.bars {
+  display: flex;
+  gap: 2px;
+  height: calc(var(--px) * 5);
+  padding: 2px;
+  background: var(--ground-d);
+  border: 1px solid var(--hairline);
+  box-shadow: inset 1px 1px 0 var(--inset-lo);
+}
+.bars i {
+  flex: 1;
+  background: var(--raised);
+  box-shadow: inset 1px 1px 0 var(--inset-lo);
+}
+.bars i.on {
+  background: var(--accent-dk);
+  background-image: repeating-linear-gradient(
+    to bottom,
+    var(--accent) 0 2px,
+    var(--accent-dk) 2px 4px
+  );
+  box-shadow: inset 1px 1px 0 var(--accent-lt);
+}
+.bars.speed i.on {
+  background: rgb(58, 110, 30);
+  background-image: repeating-linear-gradient(to bottom, var(--acid) 0 2px, rgb(58, 110, 30) 2px 4px);
+  box-shadow: inset 1px 1px 0 rgb(190, 255, 140);
+}
+.bars-input {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  margin: 0;
+  opacity: 0;
+  cursor: pointer;
+}
+.bars-input:disabled {
+  cursor: not-allowed;
+}
+.scale {
+  display: flex;
+  justify-content: space-between;
+  font-family: "Silkscreen", monospace;
+  font-size: 8px;
+  color: var(--dim);
+}
+
+/* ---- lit pixel toggles (LED + switch track) ---- */
+.toggle {
+  display: flex;
+  align-items: center;
+  gap: calc(var(--px) * 2);
+  height: calc(var(--px) * 10);
+  padding: 0 calc(var(--px) * 3);
+  background: var(--raised-2);
+  border: 1px solid var(--hairline);
+  cursor: pointer;
+  box-shadow:
+    inset 2px 2px 0 var(--inset-hi),
+    inset -2px -2px 0 var(--inset-lo);
+}
+.toggle .led {
+  width: calc(var(--px) * 3);
+  height: calc(var(--px) * 3);
+  flex: none;
+  background: var(--dim);
+  box-shadow: inset 1px 1px 0 var(--inset-lo);
+}
+.toggle .tname {
+  font-family: "Silkscreen", monospace;
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  color: var(--text);
+}
+.switch {
+  margin-left: var(--px);
+  width: calc(var(--px) * 8);
+  height: calc(var(--px) * 4);
+  flex: none;
+  position: relative;
+  background: var(--ground-d);
+  border: 1px solid var(--hairline);
+  box-shadow: inset 1px 1px 0 var(--inset-lo);
+}
+.switch::after {
+  content: "";
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: calc(var(--px) * 4 - 2px);
+  height: 100%;
+  background: var(--raised-3);
+  box-shadow:
+    inset 1px 1px 0 var(--inset-hi),
+    inset -1px -1px 0 var(--inset-lo);
+  transition: left 0.1s ease-out;
+}
+.toggle.on {
+  background: var(--accent-dk);
+  border-color: var(--accent);
+}
+.toggle.on .led {
+  background: var(--accent);
+  box-shadow: inset 1px 1px 0 var(--accent-lt);
+}
+.toggle.on .tname {
+  color: var(--accent-lt);
+}
+.toggle.on .switch {
+  background: var(--accent-dk);
+  border-color: var(--accent);
+}
+.toggle.on .switch::after {
+  left: calc(var(--px) * 4);
+  background: var(--accent);
+  box-shadow:
+    inset 1px 1px 0 var(--accent-lt),
+    inset -1px -1px 0 var(--accent-dk);
+}
+
+/* disabled meter (Darkness, while Light is off) */
+.meter.disabled {
+  opacity: 0.4;
+  filter: saturate(0.25);
+}
+.meter.disabled .val {
+  color: var(--muted);
+}
+.meter.disabled .bars i.on {
+  background: var(--dim);
+  background-image: none;
+  box-shadow: inset 1px 1px 0 var(--inset-lo);
+}
+.disabled-note {
+  font-family: "Silkscreen", monospace;
+  font-size: 8px;
+  color: var(--dim);
+  letter-spacing: 1px;
+}
+
+/* ============================================================
+   MOBILE — window simplifies, palette stacks above the stage
+   ============================================================ */
+@media (max-width: 900px) {
+  #root {
+    padding: calc(var(--px) * 3);
   }
-  .sidebar {
-    width: 100%;
-    display: flex;
+  .body {
+    grid-template-columns: 1fr;
+  }
+  .rail {
+    border-right: none;
+    border-bottom: var(--px) solid var(--hairline);
+    flex-direction: row;
     flex-wrap: wrap;
-    gap: 12px;
+    gap: calc(var(--px) * 3);
   }
   .group {
-    flex: 1 1 140px;
-    margin-bottom: 0;
+    flex: 1 1 calc(var(--px) * 40);
+  }
+  .mat {
+    padding: calc(var(--px) * 4);
+  }
+}
+
+/* honor reduced-motion for decorative chrome motion (the simulation itself is
+   content, not chrome, and is unaffected). */
+@media (prefers-reduced-motion: reduce) {
+  .tile,
+  .btn,
+  .winctl button,
+  .switch::after {
+    transition: none;
+  }
+  .tile.active::after {
+    animation: none;
   }
 }

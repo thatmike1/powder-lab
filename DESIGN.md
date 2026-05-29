@@ -4,7 +4,9 @@ The visual system for Powder Lab's chrome. The direction is **pixel-native**: th
 built from the same crisp material as the simulation. It reads as a loving pixel-art application (a
 paint tool crossed with a handheld game) framed inside a lifted desktop "window." Reference points:
 Aseprite / Deluxe Paint (the workbench), Noita (in-world atmosphere), PICO-8 / Playdate (the
-control craft). The approved reference mock is `design-explorations/10-hybrid.html`.
+control craft). This direction was set by the mock `design-explorations/10-hybrid.html` and is now
+implemented in the live app — `src/App.tsx` + `src/styles.css` are the reference of record (the
+`design-explorations/` scratch folder can be deleted).
 
 ## Theme
 

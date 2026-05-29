@@ -72,10 +72,12 @@ In one line: **pixel-native chrome** that shares the medium of the simulation (c
 hand-pixeled; warm-dark, accent follows the selected material), framed in a lifted desktop "window"
 with a left material palette and a bottom control bar. Styling stays **plain CSS + a `:root` token
 layer** (no framework); inline `style` is only for data-driven material colors and the live
-`--accent` variable. Approved reference mock: `design-explorations/10-hybrid.html`.
+`--accent` variable.
 
-The redesign of `App.tsx` / `styles.css` to match is tracked in `powder-lab-m86` (the direction
-half is done; the implementation pass is deferred until the heat-field work lands).
+This direction is now implemented: `src/App.tsx` + `src/styles.css` are the reference of record
+(tracked in `powder-lab-m86`). The pixel chrome is composed from `src/pixel-icons.tsx` (hand-pixeled
+inline-SVG icon set) and `src/chip-styles.ts` (per-material tile textures). The `design-explorations/`
+scratch folder that seeded the direction can be deleted.
 
 ## Roadmap / future ideas
 
