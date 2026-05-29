@@ -18,6 +18,10 @@ Thumbs.db
 # vite cache
 .vite/
 
+# playwright (browser automation artifacts)
+.playwright-mcp/
+.playwright-cli/
+
 # Beads / Dolt files (added by bd init)
 .dolt/
 *.db
