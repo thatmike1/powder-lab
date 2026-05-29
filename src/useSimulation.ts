@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { Simulation } from './sim/Simulation'
 import { Mat, PALETTE } from './sim/materials'
+import { Simulation } from './sim/Simulation'
 
 export interface SimUiState {
   running: boolean
@@ -55,8 +55,10 @@ export function useSimulation(W: number, H: number, scale: number) {
   })
 
   useEffect(() => {
-    const canvas = canvasRef.current!
-    const ctx = canvas.getContext('2d', { alpha: false })!
+    const canvas = canvasRef.current
+    if (!canvas) return
+    const ctx = canvas.getContext('2d', { alpha: false })
+    if (!ctx) return
     const sim = new Simulation(W, H)
     simRef.current = sim
 

@@ -1,5 +1,5 @@
-import { useSimulation } from './useSimulation'
 import { CATEGORIES, PALETTE } from './sim/materials'
+import { useSimulation } from './useSimulation'
 
 // Grid resolution and on-screen scale. 200x150 cells @ 4px = an 800x600 canvas.
 const W = 200
@@ -40,6 +40,7 @@ export default function App() {
                   const active = ui.material === p.id
                   return (
                     <button
+                      type="button"
                       key={p.id}
                       className={`swatch${active ? ' active' : ''}`}
                       onClick={() => setMaterial(p.id)}
@@ -72,13 +73,13 @@ export default function App() {
       </div>
 
       <footer className="controls">
-        <button className="ctl primary" onClick={toggleRunning}>
+        <button type="button" className="ctl primary" onClick={toggleRunning}>
           {ui.running ? '⏸ Pause' : '▶ Play'}
         </button>
-        <button className="ctl" onClick={stepOnce} disabled={ui.running}>
+        <button type="button" className="ctl" onClick={stepOnce} disabled={ui.running}>
           ⏭ Step
         </button>
-        <button className="ctl" onClick={clear}>
+        <button type="button" className="ctl" onClick={clear}>
           🗑 Clear
         </button>
 
@@ -106,11 +107,15 @@ export default function App() {
           <span className="val">{ui.speed}×</span>
         </label>
 
-        <button className={`ctl toggle${ui.glow ? ' on' : ''}`} onClick={toggleGlow}>
+        <button type="button" className={`ctl toggle${ui.glow ? ' on' : ''}`} onClick={toggleGlow}>
           ✨ Glow {ui.glow ? 'on' : 'off'}
         </button>
 
-        <button className={`ctl toggle${ui.light ? ' on' : ''}`} onClick={toggleLight}>
+        <button
+          type="button"
+          className={`ctl toggle${ui.light ? ' on' : ''}`}
+          onClick={toggleLight}
+        >
           💡 Light {ui.light ? 'on' : 'off'}
         </button>
 

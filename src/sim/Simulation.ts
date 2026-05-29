@@ -1,4 +1,4 @@
-import { Mat, density, isMovable, isDissolvable } from './materials'
+import { density, isDissolvable, isMovable, Mat } from './materials'
 
 const CS = 16 // chunk size (cells per side)
 
@@ -82,11 +82,15 @@ export class Simulation {
     this.off = document.createElement('canvas')
     this.off.width = W
     this.off.height = H
-    this.offCtx = this.off.getContext('2d')!
+    const offCtx = this.off.getContext('2d')
+    if (!offCtx) throw new Error('2d context unavailable for offscreen canvas')
+    this.offCtx = offCtx
     this.glowCanvas = document.createElement('canvas')
     this.glowCanvas.width = W
     this.glowCanvas.height = H
-    this.glowCtx = this.glowCanvas.getContext('2d')!
+    const glowCtx = this.glowCanvas.getContext('2d')
+    if (!glowCtx) throw new Error('2d context unavailable for glow canvas')
+    this.glowCtx = glowCtx
   }
 
   // ---- low-level cell ops ------------------------------------------------
