@@ -137,9 +137,30 @@ export function useSimulation(W: number, H: number, scale: number) {
     let raf = 0
     let frames = 0
     let fpsT = performance.now()
+    // Fixed-timestep accumulator: the sim advances by real wall-clock time, not
+    // by rendered frames, so a material falls at the same speed on a 60Hz panel
+    // and a 120Hz one. We render every frame but only step the sim once per
+    // STEP_MS of accumulated (speed-scaled) time.
+    const STEP_MS = 1000 / 75 // one fixed sim tick = 1/75 s of sim time (baseline)
+    const MAX_STEPS = 12 // spiral-of-death clamp; clears speed=6 (~7.5 ticks/frame)
+    let last = performance.now()
+    let acc = 0 // unconsumed sim-time, ms
     const loop = (now: number) => {
       const c = cfg.current
-      if (c.running) sim.step(c.speed)
+      let dt = now - last
+      last = now
+      if (dt > 250) dt = 250 // tab was backgrounded — don't replay the whole gap
+      if (c.running) {
+        acc += dt * c.speed
+        let steps = Math.floor(acc / STEP_MS)
+        acc -= steps * STEP_MS
+        if (steps > MAX_STEPS) {
+          // too far behind — cap the catch-up and drop the backlog so we never spiral
+          steps = MAX_STEPS
+          acc = 0
+        }
+        if (steps > 0) sim.step(steps)
+      }
       // "Faucet": holding the pointer still keeps emitting (great for fluids/fire).
       if (pointer.current.down) paintAt(pointer.current.x, pointer.current.y)
       // heatmap is a render-time flag on the sim, kept out of render()'s args.
