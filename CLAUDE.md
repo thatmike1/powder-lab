@@ -89,32 +89,7 @@ scratch folder that seeded the direction can be deleted.
 
 ## Roadmap / future ideas
 
-Not commitments — pick whatever's fun. Two orderings below: one by how much each idea improves the codebase, one by how much it'd make a viewer go "whoa."
-
-### By architectural leverage
-
-- **🌡️ Heat field.** Add a parallel temperature grid that diffuses each frame. Replace the hard-coded "touches fire/lava" ignition checks with real thresholds (ignition point, melting point, freezing point). This is the highest-leverage change — it turns a pile of special cases into one unified physical model and makes ice/steam/lava behavior emergent rather than scripted.
-- **💨 Pressure & velocity.** Give fluids a velocity field so water sloshes and gases pressurize/equalize, instead of the current one-cell-per-frame spread. Bigger lift; pairs well with the heat field.
-- **🖼️ Image import.** Drop a PNG and rasterize it into colored sand that falls — map pixel luminance/hue to materials. Cheap to build, very shareable.
-- **💾 Save / load / share scenes.** Serialize the `cells` grid (RLE-compress it) into a URL hash or a downloadable file. Enables a "scene gallery."
-- **🧪 Material editor.** Surface the property tables (`density`, flammability, reactions) as live UI so users can invent materials without touching code. Requires generalizing the hard-coded `update()` cases into a data-driven reaction table first.
-- **🌐 GPU backend.** Move the grid to a fragment/compute shader (ping-pong textures) to push from ~30k cells to millions. Largest rewrite; would replace `Simulation.step()` entirely while keeping the React/material layers.
-- **⚙️ Perf headroom.** The render loop currently scans every cell each frame in `writeImage()` even when chunks are asleep — a render-side dirty-rect pass would mirror the sim-side chunk culling. Also worth profiling the per-frame `Math.random()` volume in hot paths.
-- **🏷️ Polish.** Bump the GitHub Actions to Node 24 before the June 2026 deprecation.
-
-### By flashiness (pure wow-factor)
-
-Ranked by jaw-drop-per-screenshot, roughly descending.
-
-- **💡 Dynamic lighting.** Make fire and lava actually *cast light* — a screen-space radial glow that brightens nearby cells so a cave of stone flickers orange as lava flows past. This is the single biggest "whoa" for the least structural change: it's a second additive render pass on top of the existing `glow32` buffer, no simulation changes needed. Turns the toy into something that looks like a game.
-- **⚡ Lightning / electricity.** A material that arcs between conductive cells (metal, water) along a jagged path, branching and flickering. Electricity is inherently dramatic — instant motion in an otherwise gravity-paced world. Pairs with the heat field (arcs ignite, boil, melt).
-- **🌐 GPU backend → millions of particles.** Move the grid to ping-pong shader textures. The wow here is pure scale: a full-screen 4K storm of swirling powder at 120fps. Biggest rewrite on the list, but the most show-stopping demo.
-- **💥 Velocity-based explosions.** Right now gunpowder flashes in place. Give the blast real momentum so it hurls sand, water, and debris outward in an arc that rains back down. Explosions are the screenshot money-shot; adding throw makes them feel physical.
-- **🎬 Clip export.** One button that records the canvas to a GIF/WebM. Doesn't change the sim at all, but it's a force-multiplier for *every* other flashy feature — it's how the cool moments actually leave your screen and end up shared.
-- **🖼️ Image-drop reveal.** Drag in a photo and watch it rain down as colored sand, then dissolve/burn it. The reveal-then-destroy arc is satisfying and very shareable.
-- **🔊 Reactive audio.** Sizzle when water hits lava, a low boom on explosions, a crackle for fire scaled by how much is burning. Flashy for the ears — cheap to add with the Web Audio API, disproportionately immersive.
-- **🌊 Sloshing fluids.** With a velocity field (see leverage list), water gains momentum — waves slap walls and splash. Less of an instant screenshot, more of a "wait, is this real water?" when you interact with it.
-
+Future ideas and feature work live in **bd (beads)** — see the *Powder Lab feature roadmap* epic (`bd list --parent powder-lab-kzf`). Run `bd ready` for what's actionable now. Don't maintain a roadmap list here; it drifts out of sync with the tracker.
 
 <!-- BEGIN BEADS INTEGRATION v:1 profile:minimal hash:7510c1e2 -->
 ## Beads Issue Tracker
