@@ -154,6 +154,36 @@ describe('heat field — lava (cool & persist)', () => {
   })
 })
 
+describe('lightning — strike & fade', () => {
+  it('writes a bolt on strike, then flashes out within a few frames', () => {
+    const s = fresh()
+    s.strike(20, 1)
+    expect(countMat(s, Mat.LIGHTNING)).toBeGreaterThan(0) // bolt traced into the air
+    expect(stepUntil(s, 20, () => countMat(s, Mat.LIGHTNING) === 0)).toBe(true)
+  })
+
+  it('ignites a wood slab it strikes', () => {
+    const s = fresh()
+    for (let x = 0; x < W; x++) for (let y = 22; y < 26; y++) s.paint(x, y, 0, Mat.WOOD)
+    s.strike(20, 1) // bolt falls and terminates on the wood, dumping strike heat
+    expect(stepUntil(s, 400, () => countMat(s, Mat.FIRE) > 0)).toBe(true)
+  })
+
+  it('boils water it arcs through', () => {
+    const s = fresh()
+    for (let x = 10; x < 30; x++) for (let y = 18; y < 26; y++) s.paint(x, y, 0, Mat.WATER)
+    s.strike(20, 1) // water conducts, so the bolt passes through and superheats it
+    expect(stepUntil(s, 200, () => countMat(s, Mat.STEAM) > 0)).toBe(true)
+  })
+
+  it('settles back to sleep after a strike into empty air', () => {
+    const s = fresh()
+    s.strike(20, 1)
+    for (let i = 0; i < 500; i++) s.step()
+    expect(activeChunkCount(s)).toBe(0)
+  })
+})
+
 describe('heat field — chunk culling', () => {
   it('lets chunks sleep once heat settles (idle cost returns to ~0)', () => {
     const s = fresh()

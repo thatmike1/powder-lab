@@ -92,6 +92,9 @@ export function useSimulation(W: number, H: number, scale: number) {
     const paintAt = (gx: number, gy: number) => {
       const c = cfg.current
       const mat = pointer.current.erase ? Mat.EMPTY : c.material
+      // Lightning isn't paintable — it's a click-triggered strike (see onDown),
+      // so skip it here or a held/dragged pointer would strobe bolts every frame.
+      if (mat === Mat.LIGHTNING) return
       sim.paint(gx, gy, c.brush, mat)
     }
 
@@ -105,7 +108,9 @@ export function useSimulation(W: number, H: number, scale: number) {
       pointer.current.erase = e.button === 2 // right-click erases
       pointer.current.x = gx
       pointer.current.y = gy
-      paintAt(gx, gy)
+      // one bolt per click; paintAt no-ops for lightning so drags don't re-strike
+      if (!pointer.current.erase && cfg.current.material === Mat.LIGHTNING) sim.strike(gx, gy)
+      else paintAt(gx, gy)
     }
     const onMove = (e: PointerEvent) => {
       if (!pointer.current.down) return

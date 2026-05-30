@@ -150,6 +150,8 @@ export class Simulation {
     if (mat === Mat.FIRE) this.life[i] = 90 + ((Math.random() * 50) | 0)
     else if (mat === Mat.SMOKE) this.life[i] = 90 + ((Math.random() * 100) | 0)
     else if (mat === Mat.STEAM) this.life[i] = Math.min(255, 130 + ((Math.random() * 120) | 0))
+    else if (mat === Mat.LIGHTNING)
+      this.life[i] = 5 + ((Math.random() * 5) | 0) // brief flash
     else this.life[i] = 0
   }
 
@@ -209,6 +211,85 @@ export class Simulation {
         this.setCell(x, y, mat)
       }
     }
+  }
+
+  /** materials a bolt arcs *through* (and superheats) instead of stopping at. */
+  private isConductor(m: number): boolean {
+    return m === Mat.WATER
+  }
+
+  /**
+   * Deposit the bolt at one cell. Returns true if the cell stops the bolt.
+   * Heat is injected regardless of material, so ignition/boil/melt all emerge
+   * from the heat field: empty air becomes a visible LIGHTNING flash, conductors
+   * (water) are superheated and passed through, and any other matter is the
+   * strike point — heated, then the bolt terminates there.
+   */
+  private zap(x: number, y: number): boolean {
+    if (x < 0 || y < 0 || x >= this.W || y >= this.H) return true
+    const i = y * this.W + x
+    const m = this.cells[i]
+    if (this.heat[i] < emitTemp[Mat.LIGHTNING]) this.heat[i] = emitTemp[Mat.LIGHTNING]
+    this.wake(x, y)
+    if (m === Mat.EMPTY) {
+      this.setCell(x, y, Mat.LIGHTNING) // re-seeds heat via assignSpawnHeat
+      return false
+    }
+    return !this.isConductor(m) // conductors pass through; everything else stops
+  }
+
+  /**
+   * Horizontal pull toward the nearest conductor a few rows below — this is what
+   * makes a bolt bend toward a water pool rather than fall dead straight.
+   * Returns -1 (pull left), +1 (pull right), or 0 (none in reach).
+   */
+  private conductorPull(x: number, y: number): number {
+    const reach = 14
+    for (let r = 1; r <= 4; r++) {
+      const yy = y + r
+      if (yy >= this.H) break
+      for (let d = 1; d <= reach; d++) {
+        if (this.isConductor(this.matAt(x - d, yy))) return -1
+        if (this.isConductor(this.matAt(x + d, yy))) return 1
+      }
+    }
+    return 0
+  }
+
+  /**
+   * Walk a single jagged leader from (x,y): step mostly downward with horizontal
+   * jitter, bend toward conductors, and occasionally fork a shorter child bolt.
+   * Recurses for branches (depth-capped); each step writes via zap().
+   */
+  private bolt(x: number, y: number, depth: number, maxSteps: number): void {
+    for (let steps = 0; steps < maxSteps; steps++) {
+      if (this.zap(x, y)) return // hit ground / solid / edge
+      if (y >= this.H - 1) return // reached the floor
+      const pull = this.conductorPull(x, y)
+      const jitter = Math.random() < 0.34 ? -1 : Math.random() < 0.5 ? 1 : 0
+      let dx = jitter + pull
+      dx = dx < -1 ? -1 : dx > 1 ? 1 : dx
+      const dy = Math.random() < 0.82 ? 1 : 0
+      const nx = x + dx
+      let ny = y + dy
+      if (nx === x && ny === y) ny = y + 1 // never stall in place
+      // fork a child bolt sideways now and then for that branched look
+      if (depth < 2 && Math.random() < 0.07) {
+        this.bolt(x + (Math.random() < 0.5 ? -1 : 1), y + 1, depth + 1, maxSteps >> 1)
+      }
+      x = nx
+      y = ny
+    }
+  }
+
+  /**
+   * Fire an instant lightning bolt from (sx,sy) — the public click-to-strike
+   * entry point. The bolt and all its branches are traced synchronously; the
+   * resulting LIGHTNING cells then flash and fade over the next few frames.
+   */
+  strike(sx: number, sy: number): void {
+    if (sx < 0 || sy < 0 || sx >= this.W || sy >= this.H) return
+    this.bolt(sx, sy, 0, this.H + 40)
   }
 
   clear(): void {
@@ -368,6 +449,9 @@ export class Simulation {
       case Mat.FIRE:
         this.updateFire(x, y, i)
         return
+      case Mat.LIGHTNING:
+        this.updateLightning(x, y, i)
+        return
       case Mat.SMOKE:
         this.updateGas(x, y, i)
         return
@@ -523,6 +607,25 @@ export class Simulation {
     }
   }
 
+  /**
+   * Lightning doesn't move — it just flashes in place and dies fast. While
+   * alive it keeps re-asserting strike heat into its cell so the air-path stays
+   * scorching long enough to ignite/boil/melt what it passes, then vanishes.
+   */
+  private updateLightning(x: number, y: number, i: number): void {
+    // compare BEFORE subtracting: life is a Uint8Array, so decrementing past 0
+    // wraps to ~255 and the bolt cell would flash forever (and never let its
+    // chunk sleep). its short lifespan lands on that boundary almost every time.
+    const dec = 1 + ((Math.random() * 2) | 0)
+    if (this.life[i] <= dec) {
+      this.setCell(x, y, Mat.EMPTY)
+      return
+    }
+    this.life[i] -= dec
+    if (this.heat[i] < emitTemp[Mat.LIGHTNING]) this.heat[i] = emitTemp[Mat.LIGHTNING]
+    this.wake(x, y)
+  }
+
   /** active coolants (cold/wet matter) that can quench lava into a crust. */
   private isCoolant(m: number): boolean {
     return m === Mat.WATER || m === Mat.STEAM || m === Mat.ICE
@@ -668,7 +771,7 @@ export class Simulation {
   private colorOf(m: number, lf: number, ex: number, h: number): number {
     if (this.showTemp) return this.heatColor(h)
     const c = this.baseColor(m, lf, ex)
-    if (m === Mat.FIRE || m === Mat.LAVA) return c
+    if (m === Mat.FIRE || m === Mat.LAVA || m === Mat.LIGHTNING) return c
     return this.tint(c, h)
   }
 
@@ -723,6 +826,13 @@ export class Simulation {
         const f = ((ex + this.frame * 2) % 44) - 18
         return shade(255, 110, 30, f)
       }
+      case Mat.LIGHTNING: {
+        // hot near-white core with a blue cast; fast per-cell flicker keeps the
+        // bolt alive-looking across its few render frames. brighter while young.
+        const t = lf > 6 ? 1 : lf / 6
+        const f = ((ex + this.frame * 5) % 40) - 18
+        return rgba(clamp(180 + ((40 * t) | 0) + f), clamp(200 + ((30 * t) | 0) + f), 255)
+      }
       case Mat.SMOKE: {
         const t = lf / 180
         const g = 50 + ((40 * t) | 0)
@@ -752,7 +862,7 @@ export class Simulation {
       count++
       const c = this.colorOf(m, life[i], extra[i], heat[i])
       buf32[i] = c
-      if (m === Mat.FIRE || m === Mat.LAVA) {
+      if (m === Mat.FIRE || m === Mat.LAVA || m === Mat.LIGHTNING) {
         glow32[i] = c
         emissive++
       } else {

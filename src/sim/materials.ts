@@ -16,10 +16,11 @@ export const Mat = {
   PLANT: 12,
   GUNPOWDER: 13,
   ICE: 14,
+  LIGHTNING: 15,
 } as const
 
 export type MatId = number
-export const MAT_COUNT = 15
+export const MAT_COUNT = 16
 
 // Density drives displacement: a denser mover sinks through / swaps with a
 // lighter *movable* cell. Static solids (wall, stone, wood, plant, ice) are
@@ -53,6 +54,11 @@ export const emitTemp = new Float32Array(MAT_COUNT)
 emitTemp[Mat.FIRE] = 1200
 emitTemp[Mat.LAVA] = 700
 emitTemp[Mat.ICE] = -60 // cold source; cold enough to chill neighbors below 0
+// LIGHTNING runs hotter than fire: a bolt deposits this along its whole path,
+// so the strike point ignites wood (220), boils water (100) and melts ice (40)
+// instantly via the heat field. Re-asserted each frame of its short life so the
+// heat lingers long enough for the probabilistic ignitions to fire.
+emitTemp[Mat.LIGHTNING] = 1400
 
 // flammables -> FIRE when heat >= this. All sit under FIRE's 315 single-contact
 // ceiling so a lone flame still spreads; ordered so wood is the most stubborn.
@@ -123,6 +129,7 @@ export const PALETTE: MatMeta[] = [
   { id: Mat.ICE, name: 'Ice', rgb: [170, 210, 235], cat: 'Solids', key: '0' },
 
   { id: Mat.FIRE, name: 'Fire', rgb: [255, 150, 40], cat: 'Energy', key: 'F' },
+  { id: Mat.LIGHTNING, name: 'Lightning', rgb: [190, 205, 255], cat: 'Energy', key: 'Z' },
   { id: Mat.SMOKE, name: 'Smoke', rgb: [90, 90, 96], cat: 'Energy', key: 'S' },
   { id: Mat.STEAM, name: 'Steam', rgb: [205, 210, 220], cat: 'Energy', key: 'T' },
 ]
