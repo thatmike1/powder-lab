@@ -12,3 +12,4 @@
 {"id":"int-86a317aa","kind":"field_change","created_at":"2026-05-29T23:12:07.946061349Z","actor":"michal.psencik","issue_id":"powder-lab-vql","extra":{"field":"status","new_value":"closed","old_value":"in_progress","reason":"Closed"}}
 {"id":"int-f8860def","kind":"field_change","created_at":"2026-05-30T12:21:34.944970333Z","actor":"michal.psencik","issue_id":"powder-lab-z88","extra":{"field":"status","new_value":"closed","old_value":"open","reason":"Closed"}}
 {"id":"int-f7d0b452","kind":"field_change","created_at":"2026-05-30T12:40:02.316811747Z","actor":"michal.psencik","issue_id":"powder-lab-kzf.3","extra":{"field":"status","new_value":"closed","old_value":"in_progress","reason":"Closed"}}
+{"id":"int-10752dd9","kind":"field_change","created_at":"2026-05-30T13:40:06.213151308Z","actor":"michal.psencik","issue_id":"powder-lab-qs5","extra":{"field":"priority","new_value":"1","old_value":"2"}}
