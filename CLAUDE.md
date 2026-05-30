@@ -15,6 +15,14 @@ There is no test suite and no linter configured. `npm run build` is the gate —
 
 **Deployment is automatic.** Pushing to `main` triggers `.github/workflows/deploy.yml`, which builds and publishes `dist/` to GitHub Pages (https://thatmike1.github.io/powder-lab/). No manual deploy step.
 
+## Committing
+
+This is a fun personal project — **commit liberally without asking first.** When a change is contained and sensible, just commit it (one line, lowercase, prefixed `feat:`/`fix:`/`refactor:`/`chore:`). No need to surface "want me to commit?" prompts.
+
+**Always commit beads changes silently.** When `bd` issue creation/updates dirty `.beads/issues.jsonl`, fold it into the related commit (or a `chore:` commit) automatically — don't ask, and don't report "N beads files modified".
+
+**Never push** unless explicitly asked for that exact moment — pushing stays user-owned (it auto-deploys `main`).
+
 ## Architecture
 
 This is a falling-sand cellular-automaton sandbox. The single most important design decision:
@@ -111,7 +119,7 @@ Ranked by jaw-drop-per-screenshot, roughly descending.
 <!-- BEGIN BEADS INTEGRATION v:1 profile:minimal hash:7510c1e2 -->
 ## Beads Issue Tracker
 
-This project uses **bd (beads)** for issue tracking. Run `bd prime` to see full workflow context and commands.
+This project uses **bd (beads)** for issue tracking. For workflow context and commands, prefer the **beads skill** — do not run `bd prime` (its session-close protocol pushes git and steers toward `bd remember`, both of which conflict with this project's prefs).
 
 ### Quick Reference
 
@@ -125,7 +133,7 @@ bd close <id>         # Complete work
 ### Rules
 
 - Use `bd` for ALL task tracking — do NOT use TodoWrite, TaskCreate, or markdown TODO lists
-- Run `bd prime` for detailed command reference and session close protocol
+- For command reference, use the beads skill (not `bd prime`)
 
 **Architecture in one line:** issues live in a local Dolt DB; `.beads/issues.jsonl` is a git-tracked export kept in sync by the project git hooks. Commit `issues.jsonl` with related work; **do not push** unless explicitly asked.
 <!-- END BEADS INTEGRATION -->
