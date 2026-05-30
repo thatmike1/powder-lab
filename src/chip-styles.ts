@@ -46,9 +46,12 @@ const checker = (base: string, a: string, b: string, size = 6): CSSProperties =>
 export const CHIP_STYLES: Record<number, CSSProperties> = {
   [Mat.EMPTY]: checker('rgb(30,33,38)', 'rgb(48,52,58)', 'rgb(48,52,58)'),
   [Mat.WALL]: grid('rgb(120,122,130)', 'rgb(96,98,106)', 'rgb(140,142,150)'),
+  // magnet: red poles with steel banding — reads as a horseshoe magnet's stripe.
+  [Mat.MAGNET]: band('rgb(196,72,84)', 'rgb(150,40,52)'),
 
   [Mat.SAND]: dots('rgb(196,180,120)', 'rgb(168,152,94)', 'rgb(216,202,150)'),
   [Mat.GUNPOWDER]: dots('rgb(70,68,78)', 'rgb(40,38,46)', 'rgb(108,106,116)'),
+  [Mat.FILINGS]: dots('rgb(120,122,132)', 'rgb(80,82,92)', 'rgb(154,156,166)'),
 
   [Mat.WATER]: band('rgb(54,108,200)', 'rgb(38,84,170)'),
   [Mat.OIL]: band('rgb(78,66,44)', 'rgb(60,50,32)'),
@@ -56,6 +59,7 @@ export const CHIP_STYLES: Record<number, CSSProperties> = {
   [Mat.LAVA]: checker('rgb(180,70,20)', 'rgb(255,180,80)', 'rgb(255,110,30)'),
 
   [Mat.STONE]: grid('rgb(98,98,106)', 'rgb(78,78,86)', 'rgb(118,118,126)'),
+  [Mat.METAL]: grid('rgb(158,160,172)', 'rgb(120,122,134)', 'rgb(196,198,210)'),
   [Mat.WOOD]: {
     backgroundColor: 'rgb(112,74,42)',
     backgroundImage: 'linear-gradient(90deg, rgb(92,60,34) 50%, transparent 50%)',
@@ -70,6 +74,7 @@ export const CHIP_STYLES: Record<number, CSSProperties> = {
       'linear-gradient(0deg, rgb(255,200,80) 33%, transparent 33% 66%, rgb(255,110,30) 66%)',
     backgroundSize: '6px 9px',
   },
+  [Mat.LIGHTNING]: checker('rgb(120,150,230)', 'rgb(235,245,255)', 'rgb(150,180,255)'),
   [Mat.SMOKE]: dots('rgb(90,90,96)', 'rgb(72,72,78)', 'rgb(108,108,114)'),
   [Mat.STEAM]: dots('rgb(205,210,220)', 'rgb(185,190,200)', 'rgb(225,230,240)'),
 }

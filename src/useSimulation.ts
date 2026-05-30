@@ -91,6 +91,13 @@ export function useSimulation(W: number, H: number, scale: number) {
     }
     const paintAt = (gx: number, gy: number) => {
       const c = cfg.current
+      // Magnet is a force tool, not a paint: left-drag attracts filings, right-
+      // drag repels (so right-click does NOT erase while Magnet is selected).
+      // Intercepted before the erase->EMPTY mapping below.
+      if (c.material === Mat.MAGNET) {
+        sim.magnet(gx, gy, c.brush, !pointer.current.erase)
+        return
+      }
       const mat = pointer.current.erase ? Mat.EMPTY : c.material
       // Lightning isn't paintable — it's a click-triggered strike (see onDown),
       // so skip it here or a held/dragged pointer would strobe bolts every frame.

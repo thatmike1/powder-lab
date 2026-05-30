@@ -17,10 +17,16 @@ export const Mat = {
   GUNPOWDER: 13,
   ICE: 14,
   LIGHTNING: 15,
+  METAL: 16,
+  FILINGS: 17,
+  // MAGNET is a pure tool, not a material: it never occupies a cell, it just
+  // names a brush mode (like Eraser reuses EMPTY). Kept inside MAT_COUNT so the
+  // property tables stay densely indexed, but it's intercepted before any paint.
+  MAGNET: 18,
 } as const
 
 export type MatId = number
-export const MAT_COUNT = 16
+export const MAT_COUNT = 19
 
 // Density drives displacement: a denser mover sinks through / swaps with a
 // lighter *movable* cell. Static solids (wall, stone, wood, plant, ice) are
@@ -32,6 +38,7 @@ density[Mat.OIL] = 22
 density[Mat.ACID] = 36
 density[Mat.LAVA] = 90
 density[Mat.GUNPOWDER] = 58
+density[Mat.FILINGS] = 70 // iron — heavier than sand, sinks through water
 density[Mat.FIRE] = 1
 density[Mat.SMOKE] = 1
 density[Mat.STEAM] = 1
@@ -96,7 +103,16 @@ export function isMovable(m: number): boolean {
 
 // Acid eats these; everything else (wall, liquids, gases) it ignores.
 const dissolvable = new Uint8Array(MAT_COUNT)
-for (const m of [Mat.SAND, Mat.STONE, Mat.WOOD, Mat.PLANT, Mat.ICE, Mat.GUNPOWDER])
+for (const m of [
+  Mat.SAND,
+  Mat.STONE,
+  Mat.WOOD,
+  Mat.PLANT,
+  Mat.ICE,
+  Mat.GUNPOWDER,
+  Mat.METAL,
+  Mat.FILINGS,
+])
   dissolvable[m] = 1
 export function isDissolvable(m: number): boolean {
   return dissolvable[m] === 1
@@ -114,9 +130,11 @@ export interface MatMeta {
 export const PALETTE: MatMeta[] = [
   { id: Mat.EMPTY, name: 'Eraser', rgb: [30, 33, 38], cat: 'Tools', key: 'E' },
   { id: Mat.WALL, name: 'Wall', rgb: [120, 122, 130], cat: 'Tools', key: 'W' },
+  { id: Mat.MAGNET, name: 'Magnet', rgb: [196, 72, 84], cat: 'Tools', key: 'N' },
 
   { id: Mat.SAND, name: 'Sand', rgb: [196, 180, 120], cat: 'Powders', key: '1' },
   { id: Mat.GUNPOWDER, name: 'Gunpowder', rgb: [70, 68, 78], cat: 'Powders', key: '2' },
+  { id: Mat.FILINGS, name: 'Filings', rgb: [120, 122, 132], cat: 'Powders', key: 'I' },
 
   { id: Mat.WATER, name: 'Water', rgb: [54, 108, 200], cat: 'Liquids', key: '3' },
   { id: Mat.OIL, name: 'Oil', rgb: [78, 66, 44], cat: 'Liquids', key: '4' },
@@ -124,6 +142,7 @@ export const PALETTE: MatMeta[] = [
   { id: Mat.LAVA, name: 'Lava', rgb: [255, 110, 30], cat: 'Liquids', key: '6' },
 
   { id: Mat.STONE, name: 'Stone', rgb: [98, 98, 106], cat: 'Solids', key: '7' },
+  { id: Mat.METAL, name: 'Metal', rgb: [158, 160, 172], cat: 'Solids', key: 'M' },
   { id: Mat.WOOD, name: 'Wood', rgb: [112, 74, 42], cat: 'Solids', key: '8' },
   { id: Mat.PLANT, name: 'Plant', rgb: [46, 160, 60], cat: 'Solids', key: '9' },
   { id: Mat.ICE, name: 'Ice', rgb: [170, 210, 235], cat: 'Solids', key: '0' },

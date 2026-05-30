@@ -215,7 +215,7 @@ export class Simulation {
 
   /** materials a bolt arcs *through* (and superheats) instead of stopping at. */
   private isConductor(m: number): boolean {
-    return m === Mat.WATER
+    return m === Mat.WATER || m === Mat.METAL || m === Mat.FILINGS
   }
 
   /**
@@ -290,6 +290,69 @@ export class Simulation {
   strike(sx: number, sy: number): void {
     if (sx < 0 || sy < 0 || sx >= this.W || sy >= this.H) return
     this.bolt(sx, sy, 0, this.H + 40)
+  }
+
+  /** try to slide a filing one cell toward (tx,ty); succeeds into empty or a
+   * lighter movable (so it can be dragged up through water). */
+  private tryMagnetMove(x: number, y: number, tx: number, ty: number): boolean {
+    if (tx < 0 || ty < 0 || tx >= this.W || ty >= this.H) return false
+    const tm = this.cells[ty * this.W + tx]
+    if (tm === Mat.EMPTY) {
+      this.swap(x, y, tx, ty)
+      return true
+    }
+    if (isMovable(tm) && density[Mat.FILINGS] > density[tm]) {
+      this.swap(x, y, tx, ty)
+      return true
+    }
+    return false
+  }
+
+  /** step a filing one cell along (sx,sy), falling back to the cardinal axes so
+   * it still makes progress when the diagonal is blocked. */
+  private pullStep(x: number, y: number, sx: number, sy: number): void {
+    if (sx !== 0 && sy !== 0 && this.tryMagnetMove(x, y, x + sx, y + sy)) return
+    if (sx !== 0 && this.tryMagnetMove(x, y, x + sx, y)) return
+    if (sy !== 0 && this.tryMagnetMove(x, y, x, y + sy)) return
+  }
+
+  /**
+   * Magnet tool: nudge every FILINGS cell in radius one step toward (attract) or
+   * away from (repel) the pointer. Positions are SNAPSHOTTED first, then moved —
+   * crucially NOT gated on the per-frame `stamp`, because the render loop runs
+   * the sim step before this, so falling filings are already stamped this frame;
+   * a stamp guard would let gravity always win and the magnet would feel dead.
+   * Snapshotting instead guarantees each filing is considered exactly once.
+   * Nearest-to-pointer filings move first so inner ones clear room for the rest.
+   */
+  magnet(cx: number, cy: number, r: number, attract: boolean): void {
+    const r2 = r * r
+    const pts: Array<{ x: number; y: number; d: number }> = []
+    for (let dy = -r; dy <= r; dy++) {
+      const y = cy + dy
+      if (y < 0 || y >= this.H) continue
+      for (let dx = -r; dx <= r; dx++) {
+        const d = dx * dx + dy * dy
+        if (d > r2) continue
+        const x = cx + dx
+        if (x < 0 || x >= this.W) continue
+        if (this.cells[y * this.W + x] === Mat.FILINGS) pts.push({ x, y, d })
+      }
+    }
+    // attract: pull the closest first (they vacate cells the outer ones flow
+    // into); repel: push the farthest first so the column unpacks outward.
+    pts.sort((a, b) => (attract ? a.d - b.d : b.d - a.d))
+    for (const p of pts) {
+      if (this.cells[p.y * this.W + p.x] !== Mat.FILINGS) continue // moved already
+      let sx = p.x < cx ? 1 : p.x > cx ? -1 : 0
+      let sy = p.y < cy ? 1 : p.y > cy ? -1 : 0
+      if (!attract) {
+        sx = -sx
+        sy = -sy
+      }
+      if (sx === 0 && sy === 0) continue // sitting on the pointer
+      this.pullStep(p.x, p.y, sx, sy)
+    }
   }
 
   clear(): void {
@@ -419,8 +482,10 @@ export class Simulation {
       case Mat.EMPTY:
       case Mat.WALL:
       case Mat.STONE:
+      case Mat.METAL:
         return
       case Mat.SAND:
+      case Mat.FILINGS:
         this.updatePowder(x, y, m)
         return
       case Mat.GUNPOWDER:
@@ -817,6 +882,12 @@ export class Simulation {
         return shade(168, 208, 234, (ex % 20) - 10)
       case Mat.GUNPOWDER:
         return shade(64, 62, 70, (ex % 28) - 14)
+      case Mat.METAL:
+        // brushed-steel sheen: a few cells catch a bright highlight band.
+        return shade(150, 152, 164, (ex % 48 > 40 ? 22 : 0) + (ex % 18) - 9)
+      case Mat.FILINGS:
+        // iron grit: darker than steel, high grain so the powder glitters.
+        return shade(104, 106, 116, (ex % 46) - 20)
       case Mat.FIRE: {
         const t = lf > 120 ? 1 : lf / 120
         const f = ((ex + this.frame * 3) % 36) - 16 // animated flicker

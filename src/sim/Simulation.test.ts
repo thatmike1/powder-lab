@@ -18,6 +18,33 @@ function countMat(s: Simulation, mat: number): number {
   return c
 }
 
+/** mean x-coordinate (centre of mass) of all filings — 0 if none. */
+function filingsComX(s: Simulation): number {
+  let sum = 0
+  let n = 0
+  for (let k = 0; k < W * H; k++) {
+    if (s.cells[k] === Mat.FILINGS) {
+      sum += k % W
+      n++
+    }
+  }
+  return n ? sum / n : 0
+}
+
+/** horizontal extent (maxX - minX) of all filings — 0 if none. */
+function filingsSpreadX(s: Simulation): number {
+  let lo = W
+  let hi = -1
+  for (let k = 0; k < W * H; k++) {
+    if (s.cells[k] === Mat.FILINGS) {
+      const x = k % W
+      if (x < lo) lo = x
+      if (x > hi) hi = x
+    }
+  }
+  return hi < 0 ? 0 : hi - lo
+}
+
 /** step until `predicate` holds (returns true) or `max` frames elapse. */
 function stepUntil(s: Simulation, max: number, predicate: () => boolean): boolean {
   for (let i = 0; i < max; i++) {
@@ -181,6 +208,63 @@ describe('lightning — strike & fade', () => {
     s.strike(20, 1)
     for (let i = 0; i < 500; i++) s.step()
     expect(activeChunkCount(s)).toBe(0)
+  })
+})
+
+describe('metal & magnet', () => {
+  it('metal is a static solid that never moves', () => {
+    const s = fresh()
+    for (let x = 18; x < 23; x++) for (let y = 14; y < 17; y++) s.paint(x, y, 0, Mat.METAL)
+    const before = countMat(s, Mat.METAL)
+    for (let i = 0; i < 60; i++) s.step()
+    expect(countMat(s, Mat.METAL)).toBe(before)
+    expect(s.cells[idx(20, 15)]).toBe(Mat.METAL)
+  })
+
+  it('filings fall and settle like a powder', () => {
+    const s = fresh()
+    s.paint(20, 2, 0, Mat.FILINGS)
+    for (let i = 0; i < 60; i++) s.step()
+    expect(s.cells[idx(20, 2)]).not.toBe(Mat.FILINGS) // left the top
+    let maxY = -1
+    for (let k = 0; k < W * H; k++)
+      if (s.cells[k] === Mat.FILINGS) maxY = Math.max(maxY, (k / W) | 0)
+    expect(maxY).toBeGreaterThan(2) // ended up lower
+  })
+
+  it('magnet attracts filings toward the pointer', () => {
+    const s = fresh()
+    for (let x = 6; x < 12; x++) for (let y = 26; y < 29; y++) s.paint(x, y, 0, Mat.FILINGS)
+    for (let i = 0; i < 30; i++) s.step() // settle the pile
+    const before = filingsComX(s)
+    // mimic the render loop: step THEN apply the magnet, with the pointer to the right
+    for (let i = 0; i < 80; i++) {
+      s.step()
+      s.magnet(22, 28, 18, true)
+    }
+    expect(filingsComX(s)).toBeGreaterThan(before + 1)
+  })
+
+  it('magnet repels filings away from the pointer', () => {
+    const s = fresh()
+    for (let x = 18; x < 23; x++) for (let y = 26; y < 29; y++) s.paint(x, y, 0, Mat.FILINGS)
+    for (let i = 0; i < 30; i++) s.step()
+    const before = filingsSpreadX(s)
+    for (let i = 0; i < 80; i++) {
+      s.step()
+      s.magnet(20, 28, 14, false)
+    }
+    expect(filingsSpreadX(s)).toBeGreaterThan(before + 1)
+  })
+
+  it('lightning treats metal as a conductor and arcs through it', () => {
+    const s = fresh()
+    for (let x = 0; x < W; x++) s.paint(x, 10, 0, Mat.METAL) // full-width slab
+    s.strike(20, 1)
+    let below = 0
+    for (let y = 11; y < H; y++)
+      for (let x = 0; x < W; x++) if (s.cells[idx(x, y)] === Mat.LIGHTNING) below++
+    expect(below).toBeGreaterThan(0) // bolt passed through the conductor
   })
 })
 
