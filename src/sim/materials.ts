@@ -23,10 +23,11 @@ export const Mat = {
   // names a brush mode (like Eraser reuses EMPTY). Kept inside MAT_COUNT so the
   // property tables stay densely indexed, but it's intercepted before any paint.
   MAGNET: 18,
+  GLASS: 19, // formed when sand melts under sustained lava heat
 } as const
 
 export type MatId = number
-export const MAT_COUNT = 19
+export const MAT_COUNT = 20
 
 // Density drives displacement: a denser mover sinks through / swaps with a
 // lighter *movable* cell. Static solids (wall, stone, wood, plant, ice) are
@@ -43,6 +44,32 @@ density[Mat.FIRE] = 1
 density[Mat.SMOKE] = 1
 density[Mat.STEAM] = 1
 
+// Per-material thermal conductivity (0 = perfect insulator, 1 = conducts like
+// air). Drives the harmonic-mean face flow in Simulation.diffuse(): heat through
+// the boundary between two cells is throttled by the *less* conductive one, so a
+// cond-0 WALL is thermally inert with no special-case. Defaults to 1; only
+// insulators and conductors deviate. GUNPOWDER must be listed — omitting it would
+// default to 1.0 and let a powder pile conduct a flame freely into a chain
+// detonation at its low ignition point. METAL/FILINGS conduct hard (a metal bar
+// bridges a flame to its far side); stone/wood/glass insulate.
+export const CONDUCT = new Float32Array(MAT_COUNT).fill(1)
+CONDUCT[Mat.WALL] = 0
+CONDUCT[Mat.STONE] = 0.12
+CONDUCT[Mat.WOOD] = 0.15
+CONDUCT[Mat.PLANT] = 0.15
+CONDUCT[Mat.GLASS] = 0.2
+CONDUCT[Mat.ICE] = 0.6
+CONDUCT[Mat.SAND] = 0.4
+CONDUCT[Mat.GUNPOWDER] = 0.4
+CONDUCT[Mat.FIRE] = 0.5
+CONDUCT[Mat.LAVA] = 0.6
+CONDUCT[Mat.WATER] = 0.6
+CONDUCT[Mat.OIL] = 0.6
+CONDUCT[Mat.ACID] = 0.6
+CONDUCT[Mat.METAL] = 0.9
+CONDUCT[Mat.FILINGS] = 0.9
+// EMPTY / SMOKE / STEAM / LIGHTNING keep the 1.0 default.
+
 // ---- thermal threshold tables -------------------------------------------
 // Public Float32Arrays indexed directly in the hot loop (same style as
 // `density`), NOT the private+accessor style of isMovable/isDissolvable —
@@ -52,15 +79,19 @@ density[Mat.STEAM] = 1
 // temperature each material clamps its own cell to every frame (heat sources
 // and sinks). FIRE/LAVA are hot sources; ICE is a cold source below AMBIENT.
 export const emitTemp = new Float32Array(MAT_COUNT)
-// FIRE runs hot so even a flammable touched by a SINGLE flame clears its
-// ignition point: a cell with one neighbor at E and three at AMBIENT settles at
-// (E + 3*AMBIENT)/4, so FIRE=1200 gives a 315 ceiling — above every ignition
-// point below. LAVA stays at 700 (a 190 single-contact ceiling, enough in
-// bulk) BECAUSE raising it would push lava's per-frame value above its
-// freezePoint and silently disable the lava -> stone crust.
+// FIRE runs very hot so that even under the conductivity-throttled, actively
+// cooling heat field a flammable touched by a single flame still climbs past its
+// ignition point before the flame moves on. LAVA stays at 700: hot enough to
+// melt sand to glass and boil water in bulk, while its stone-crust gate is a
+// RELATIVE margin below this value (LAVA_QUENCH_DELTA in Simulation), so the two
+// move together — raising emitTemp[LAVA] would raise the gate in lockstep.
 emitTemp[Mat.FIRE] = 1200
 emitTemp[Mat.LAVA] = 700
-emitTemp[Mat.ICE] = -60 // cold source; cold enough to chill neighbors below 0
+// cold source. Set well below ambient because the Newtonian COOL term in
+// diffuse() pulls every cell back toward +20 each frame, fighting the cold; at
+// -100 a water cell with a single ice neighbor still settles a degree or two
+// below 0 and freezes. A shallower value lets COOL win and ice stops growing.
+emitTemp[Mat.ICE] = -100
 // LIGHTNING runs hotter than fire: a bolt deposits this along its whole path,
 // so the strike point ignites wood (220), boils water (100) and melts ice (40)
 // instantly via the heat field. Re-asserted each frame of its short life so the
@@ -78,6 +109,11 @@ ignitionPoint[Mat.WOOD] = 220
 // solid -> liquid when heat >= this (must be > AMBIENT so ice persists at rest).
 export const meltPoint = new Float32Array(MAT_COUNT)
 meltPoint[Mat.ICE] = 40
+// SAND -> GLASS under sustained lava heat. Tuned for the cooled field: a sand
+// cell under a single lava neighbor only reaches ~198, under a pool ~340, so a
+// 300 gate may never form glass — 220 forms it under a real pool while leaving a
+// lone hot speck inert. (Gated by the glass test in the tuning loop.)
+meltPoint[Mat.SAND] = 220
 
 // liquid -> gas when heat >= this.
 export const boilPoint = new Float32Array(MAT_COUNT)
@@ -87,10 +123,12 @@ boilPoint[Mat.WATER] = 100
 // update() switch). default 0 means "no transition" for that material.
 export const freezePoint = new Float32Array(MAT_COUNT)
 freezePoint[Mat.WATER] = 0 // -> ICE
-freezePoint[Mat.LAVA] = 600 // -> STONE, but only when touching a coolant (see
-// updateLava): high enough that a single water/steam neighbor trips it, while
-// the coolant gate keeps airborne lava molten regardless of temperature.
-freezePoint[Mat.STEAM] = 40 // -> WATER (condense) only once well-cooled aloft
+// NOTE: lava's crust gate is NOT a freezePoint — it lives in Simulation as a
+// relative margin below the emission temperature (LAVA_QUENCH_DELTA), gated on
+// real coolant contact, so airborne lava stays molten regardless of temperature.
+// -> WATER (condense). Sub-ambient so steam in plain 20° air never reaches it
+// and dissipates by lifespan instead of mass-condensing back to rain.
+freezePoint[Mat.STEAM] = 12
 
 // A "movable" cell can be displaced by density swaps (liquids + gases + fire).
 // Powders are intentionally NOT movable-by-others, so water rests on sand etc.
@@ -112,6 +150,7 @@ for (const m of [
   Mat.GUNPOWDER,
   Mat.METAL,
   Mat.FILINGS,
+  Mat.GLASS,
 ])
   dissolvable[m] = 1
 export function isDissolvable(m: number): boolean {
@@ -146,6 +185,7 @@ export const PALETTE: MatMeta[] = [
   { id: Mat.WOOD, name: 'Wood', rgb: [112, 74, 42], cat: 'Solids', key: '8' },
   { id: Mat.PLANT, name: 'Plant', rgb: [46, 160, 60], cat: 'Solids', key: '9' },
   { id: Mat.ICE, name: 'Ice', rgb: [170, 210, 235], cat: 'Solids', key: '0' },
+  { id: Mat.GLASS, name: 'Glass', rgb: [200, 225, 235], cat: 'Solids', key: 'A' },
 
   { id: Mat.FIRE, name: 'Fire', rgb: [255, 150, 40], cat: 'Energy', key: 'F' },
   { id: Mat.LIGHTNING, name: 'Lightning', rgb: [190, 205, 255], cat: 'Energy', key: 'Z' },

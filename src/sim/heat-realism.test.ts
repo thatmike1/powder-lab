@@ -65,7 +65,7 @@ describe('heat-field realism — targets (RED until the heat rewrite)', () => {
   // SYMPTOM #3: heat conducts through stone as if it were not there.
   // Desired: a stone wall insulates, so wood behind it does not ignite from a
   // lava pool on the far side. Today stone conducts like air and the wood cooks.
-  it.fails('a stone wall insulates wood from a lava pool behind it', () => {
+  it('a stone wall insulates wood from a lava pool behind it', () => {
     const s = fresh()
     for (let y = 8; y < 22; y++) {
       for (let x = 8; x < 12; x++) s.paint(x, y, 0, Mat.LAVA) // reservoir
@@ -81,13 +81,13 @@ describe('heat-field realism — targets (RED until the heat rewrite)', () => {
 
   // SYMPTOM #2: interior hot pockets linger because the only heat sink is the
   // grid boundary. Desired: a lone 600-degree mass actively cools toward ambient.
-  it.fails('a lone hot mass cools toward ambient within 150 frames', () => {
+  it('a lone hot mass cools toward ambient within 150 frames', () => {
     const s = fresh()
     // STONE so the mass does not fall (Eulerian heat stays put); override heat.
     for (let x = 18; x < 23; x++) for (let y = 13; y < 18; y++) s.paint(x, y, 0, Mat.STONE)
     for (let x = 18; x < 23; x++) for (let y = 13; y < 18; y++) s.heat[idx(x, y)] = 600
     for (let i = 0; i < 150; i++) s.step()
-    expect(s.heat[idx(20, 15)]).toBeLessThan(60)
+    expect(s.heat[idx(20, 15)]).toBeLessThan(40)
   })
 
   // SYMPTOM #1: heat permeates too far. A pinned lava pool superheats its whole
@@ -95,13 +95,21 @@ describe('heat-field realism — targets (RED until the heat rewrite)', () => {
   // the field neither attenuates with distance nor decays. Desired: a cooling
   // term + lower DIFFUSE keep the halo tight — far cells return to near ambient
   // while the cell right beside the pool stays hot.
-  it.fails('a lava pool keeps its heat halo local', () => {
+  it('a lava pool keeps its heat halo local', () => {
     const s = fresh()
-    for (let x = 8; x <= 32; x++) s.paint(x, 21, 0, Mat.WALL) // floor so the pool stays put
-    for (let x = 18; x <= 22; x++) for (let y = 18; y <= 20; y++) s.paint(x, y, 0, Mat.LAVA)
+    // Lava is runny: a bare floor lets it spread across the whole width, which
+    // would drag the source right up to any "far" cell. So PIN it in an
+    // open-topped basin (side + bottom walls) and measure the halo decaying up
+    // the open-air column above the pool — a genuinely stationary hot source.
+    for (let y = 8; y <= 21; y++) {
+      s.paint(16, y, 0, Mat.WALL)
+      s.paint(24, y, 0, Mat.WALL)
+    }
+    for (let x = 16; x <= 24; x++) s.paint(x, 21, 0, Mat.WALL) // floor
+    for (let x = 17; x <= 23; x++) for (let y = 16; y <= 20; y++) s.paint(x, y, 0, Mat.LAVA)
     for (let i = 0; i < 200; i++) s.step()
-    expect(s.heat[idx(31, 19)]).toBeLessThan(50) // 9 cells past the edge: near ambient
-    expect(s.heat[idx(23, 19)]).toBeGreaterThan(100) // 1 cell past the edge: still hot
+    expect(s.heat[idx(20, 7)]).toBeLessThan(50) // 9 cells above the pool: near ambient
+    expect(s.heat[idx(20, 15)]).toBeGreaterThan(100) // 1 cell above the pool: still hot
   })
 })
 
@@ -110,6 +118,34 @@ describe('heat-field realism — targets (RED until the heat rewrite)', () => {
 function ignitionFloor(): number {
   return 120
 }
+
+// ===========================================================================
+// CONDUCTION — the flip side of insulation. The new CONDUCT table makes METAL a
+// thermal bridge (0.9) and STONE an insulator (0.12), so the same scenario gives
+// opposite results by material. Fully deterministic (no RNG in the heat path).
+// ===========================================================================
+
+describe('heat-field realism — conduction (metal bridges, stone insulates)', () => {
+  it('metal conducts heat along a bar while stone insulates', () => {
+    // pin one end of an 8-cell bar hot, then read 4 cells in. A 1-thick bar
+    // bleeds heat to the surrounding air, so neither end stays scorching — but
+    // metal carries the heat measurably further down the bar than stone does.
+    const farHeat = (mat: number): number => {
+      const s = fresh()
+      for (let x = 15; x <= 22; x++) s.paint(x, 15, 0, mat)
+      for (let i = 0; i < 150; i++) {
+        s.heat[idx(15, 15)] = 600 // re-pin the hot end each frame
+        s.step()
+      }
+      return s.heat[idx(19, 15)] // 4 cells in from the hot end
+    }
+    const metal = farHeat(Mat.METAL)
+    const stone = farHeat(Mat.STONE)
+    expect(metal).toBeGreaterThan(40) // metal bridges the heat down the bar
+    expect(stone).toBeLessThan(30) // stone barely passes it — near ambient
+    expect(metal).toBeGreaterThan(stone)
+  })
+})
 
 // ===========================================================================
 // THERMAL THRESHOLD TARGETS — single-contact margins. RED until knob re-derive.
@@ -138,7 +174,7 @@ describe('reaction realism — targets', () => {
   // a probabilistic check for WATER only, and the fire boils its neighbors to
   // steam, so a fire body lingers ~60 frames and only dies by burnout (measured:
   // 13 of 25 cells still burning at frame 60). Desired: water quenches it quickly.
-  it.fails('a fire body submerged in water is quenched quickly', () => {
+  it('a fire body submerged in water is quenched quickly', () => {
     const s = fresh()
     for (let x = 14; x < 27; x++) for (let y = 9; y < 22; y++) s.paint(x, y, 0, Mat.WATER)
     for (let dx = -2; dx <= 2; dx++)
@@ -147,7 +183,7 @@ describe('reaction realism — targets', () => {
   })
 
   // REVIEW #7: wet gunpowder still detonates — water adjacency gives no shield.
-  it.fails('gunpowder surrounded by water does not detonate when heated', () => {
+  it('gunpowder surrounded by water does not detonate when heated', () => {
     const s = fresh()
     s.paint(20, 15, 0, Mat.GUNPOWDER)
     s.paint(19, 15, 0, Mat.WATER)
@@ -162,7 +198,7 @@ describe('reaction realism — targets', () => {
   // REVIEW #11: steam condenses en masse in plain ambient air because its
   // condense threshold (40) sits above ambient (20). Desired: ambient steam
   // dissipates by lifespan instead of raining back down.
-  it.fails('steam in plain ambient air does not mass-condense to water', () => {
+  it('steam in plain ambient air does not mass-condense to water', () => {
     const s = fresh()
     for (let x = 18; x < 23; x++) for (let y = 13; y < 18; y++) s.paint(x, y, 0, Mat.STEAM)
     for (let i = 0; i < 150; i++) s.step()
@@ -170,8 +206,21 @@ describe('reaction realism — targets', () => {
   })
 
   // REVIEW #8: lava + sand should make glass — the most-expected falling-sand
-  // reaction, currently absent. Needs a new Mat.GLASS; tracked, not yet written.
-  it.todo('sand under a lava pool melts to glass (needs Mat.GLASS)')
+  // reaction. A sand cell touching a lava POOL reaches ~340 (a single contact
+  // only ~198), so it crosses meltPoint[SAND] and fuses to GLASS at the contact
+  // surface. Pinned in a basin so the lava stays seated on the sand bed.
+  it('sand under a lava pool melts to glass', () => {
+    const s = fresh()
+    for (let y = 10; y <= 22; y++) {
+      s.paint(13, y, 0, Mat.WALL)
+      s.paint(27, y, 0, Mat.WALL)
+    }
+    for (let x = 13; x <= 27; x++) s.paint(x, 22, 0, Mat.WALL) // floor
+    for (let x = 14; x <= 26; x++) for (let y = 18; y <= 21; y++) s.paint(x, y, 0, Mat.SAND) // bed
+    for (let x = 14; x <= 26; x++) for (let y = 12; y <= 16; y++) s.paint(x, y, 0, Mat.LAVA) // pool
+    for (let i = 0; i < 400; i++) s.step()
+    expect(countMat(s, Mat.GLASS)).toBeGreaterThan(0)
+  })
 })
 
 // ===========================================================================

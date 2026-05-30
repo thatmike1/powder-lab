@@ -1,5 +1,6 @@
 import {
   boilPoint,
+  CONDUCT,
   density,
   emitTemp,
   freezePoint,
@@ -15,10 +16,25 @@ const CS = 16 // chunk size (cells per side)
 
 // ---- heat field tuning ---------------------------------------------------
 const AMBIENT = 20 // resting temperature everything relaxes toward
-const DIFFUSE = 0.2 // fraction of the neighbor gradient that flows per frame
-// (stable for the 4-neighbor stencil: 4*DIFFUSE < 1). higher = heat reaches a
-// neighbor in a single frame, so a brief flame contact can still ignite wood.
+const DIFFUSE = 0.13 // fraction of the (conductivity-weighted) neighbor gradient
+// that flows per frame. Stable because the harmonic-mean face weight caps at 1,
+// so the worst-case stencil is 1 - 4*DIFFUSE = 0.48 (convex). Lower than the old
+// 0.2 to shorten the decay length (~2.5 cells) so a hot pocket's halo stays tight.
+const COOL = 0.02 // Newtonian cooling: each cell relaxes COOL toward AMBIENT every
+// frame regardless of neighbors. This is the interior heat sink that lets a lone
+// hot pocket actually decay to ambient instead of lingering forever.
 const EPS = 0.5 // heat delta below which a cell is "settled" and stops waking
+// Cooling-only cells drift toward AMBIENT by COOL*(h-AMBIENT); that delta drops
+// under EPS while still ~25° from ambient, which would freeze a pocket mid-decay
+// once its chunk sleeps. So the cooling tail uses its own (wider) band:
+const AMBIENT_BAND = 2 // keep a cell's chunk awake while |h - AMBIENT| > this
+
+// Lava crusts when a coolant-adjacent cell cools below emitTemp[LAVA] minus this
+// margin. The slow new solver drops a water-touching lava cell only ~60°/frame,
+// so the gate sits just under the emission temperature (700 - 50 = 650) to catch
+// that drop. A large delta (e.g. 150 -> threshold 550) is unreachable while the
+// cell keeps re-emitting and would leave open-air quench broken.
+const LAVA_QUENCH_DELTA = 50
 
 // Background color (matches the canvas frame in CSS).
 const BG_R = 16,
@@ -235,6 +251,10 @@ export class Simulation {
       this.setCell(x, y, Mat.LIGHTNING) // re-seeds heat via assignSpawnHeat
       return false
     }
+    // A jagged leader can re-cross a cell it already lit; passing through its own
+    // plasma (rather than dead-ending on it) is what lets a zigzagging bolt still
+    // reach the ground instead of fizzling in mid-air on a self-intersection.
+    if (m === Mat.LIGHTNING) return false
     return !this.isConductor(m) // conductors pass through; everything else stops
   }
 
@@ -439,7 +459,7 @@ export class Simulation {
    * particle and the `stamp` double-move contract is untouched.
    */
   private diffuse(): void {
-    const { W, H, chunkW, chunkH, heat, heatNext } = this
+    const { W, H, chunkW, chunkH, cells, heat, heatNext } = this
     // full copy so cells in sleeping chunks carry their temperature forward
     // unchanged across the buffer swap (no stale/zero values when they wake).
     heatNext.set(heat)
@@ -454,16 +474,48 @@ export class Simulation {
           for (let x = x0; x < x1; x++) {
             const i = y * W + x
             const h = heat[i]
-            // out-of-bounds neighbors read as AMBIENT (walls don't conduct in v1)
-            const hUp = y > 0 ? heat[i - W] : AMBIENT
-            const hDown = y < H - 1 ? heat[i + W] : AMBIENT
-            const hLeft = x > 0 ? heat[i - 1] : AMBIENT
-            const hRight = x < W - 1 ? heat[i + 1] : AMBIENT
-            const next = h + DIFFUSE * (hUp + hDown + hLeft + hRight - 4 * h)
+            const ci = CONDUCT[cells[i]]
+            // Per face, heat flows at the harmonic mean of the two cells'
+            // conductivities (series resistance: the duller side throttles the
+            // boundary). An OOB neighbor reads as AMBIENT air (heat=AMBIENT,
+            // cond=1). A cond-0 WALL forces kFace=0 on every touching face, so it
+            // neither conducts nor leaks — thermally inert with no special case.
+            // unrolled 4-neighbor face flow (no per-cell array allocation).
+            let flow = 0
+            {
+              const hN = y > 0 ? heat[i - W] : AMBIENT
+              const cn = y > 0 ? CONDUCT[cells[i - W]] : 1
+              flow += ((2 * ci * cn) / (ci + cn + 1e-6)) * (hN - h)
+            }
+            {
+              const hN = y < H - 1 ? heat[i + W] : AMBIENT
+              const cn = y < H - 1 ? CONDUCT[cells[i + W]] : 1
+              flow += ((2 * ci * cn) / (ci + cn + 1e-6)) * (hN - h)
+            }
+            {
+              const hN = x > 0 ? heat[i - 1] : AMBIENT
+              const cn = x > 0 ? CONDUCT[cells[i - 1]] : 1
+              flow += ((2 * ci * cn) / (ci + cn + 1e-6)) * (hN - h)
+            }
+            {
+              const hN = x < W - 1 ? heat[i + 1] : AMBIENT
+              const cn = x < W - 1 ? CONDUCT[cells[i + 1]] : 1
+              flow += ((2 * ci * cn) / (ci + cn + 1e-6)) * (hN - h)
+            }
+            let next = h + DIFFUSE * flow
+            // Newtonian cooling toward ambient: the interior heat sink that lets
+            // an isolated hot pocket decay instead of lingering at the boundary.
+            next += COOL * (AMBIENT - next)
+            // Stay awake while heat is still moving OR while meaningfully off
+            // ambient — the latter decouples the cooling tail from EPS so a slow
+            // exponential decay doesn't sleep at ~45° absolute. Once a cell is
+            // both settled AND within the ambient band, snap it exactly to
+            // ambient as it goes to sleep so no residual warmth is frozen in.
+            const moving = next - h > EPS || h - next > EPS
+            const offAmbient = next - AMBIENT > AMBIENT_BAND || AMBIENT - next > AMBIENT_BAND
+            if (moving || offAmbient) this.wake(x, y)
+            else next = AMBIENT
             heatNext[i] = next
-            // re-arm this cell's chunk + neighbors while heat is still moving;
-            // once everything settles within EPS, wakes stop and chunks sleep.
-            if (next - h > EPS || h - next > EPS) this.wake(x, y)
           }
         }
       }
@@ -483,18 +535,32 @@ export class Simulation {
       case Mat.WALL:
       case Mat.STONE:
       case Mat.METAL:
+      case Mat.GLASS:
         return
       case Mat.SAND:
+        // sustained lava heat fuses sand into glass; probabilistic so a pool
+        // forms a glass crust gradually rather than flashing the whole bed.
+        if (this.heat[i] >= meltPoint[Mat.SAND] && Math.random() < 0.05) {
+          this.setCell(x, y, Mat.GLASS)
+          return
+        }
+        this.updatePowder(x, y, m)
+        return
       case Mat.FILINGS:
         this.updatePowder(x, y, m)
         return
-      case Mat.GUNPOWDER:
+      case Mat.GUNPOWDER: {
+        // wet gunpowder is a soggy clump: a water 4-neighbor both shields it
+        // from ignition AND pins it in place (it neither detonates nor sinks/
+        // flows while wet). stateless — re-arms the instant the water moves off.
+        if (this.nearWater(x, y)) return
         if (this.heat[i] >= ignitionPoint[Mat.GUNPOWDER]) {
           this.explode(x, y)
           return
         }
         this.updatePowder(x, y, m)
         return
+      }
       case Mat.WATER:
         this.updateWater(x, y, i, m)
         return
@@ -524,7 +590,7 @@ export class Simulation {
         this.updateSteam(x, y, i)
         return
       case Mat.WOOD:
-        if (this.heat[i] >= ignitionPoint[Mat.WOOD] && Math.random() < 0.05)
+        if (this.heat[i] >= ignitionPoint[Mat.WOOD] && Math.random() < 0.1)
           this.setCell(x, y, Mat.FIRE)
         return
       case Mat.PLANT:
@@ -618,7 +684,15 @@ export class Simulation {
       return
     }
     if (this.heat[i] <= freezePoint[Mat.WATER]) {
-      this.setCell(x, y, Mat.ICE) // cold-driven freeze (ice chills via diffusion)
+      // cold-driven freeze, deterministic. No stochastic gate is needed for a
+      // gradual front: the rewritten heat field is LOCAL (conductivity throttle
+      // + Newtonian cooling), so only the cold frontier sits below 0 at any
+      // instant. The freeze front therefore advances one shell at a time as the
+      // cold diffuses outward — a whole pool can't dip below 0 at once and
+      // flash-freeze. (A probabilistic gate here instead loses the race against
+      // unsupported water draining away before it can freeze — see the
+      // ice-grows-by-freezing guardrail.)
+      this.setCell(x, y, Mat.ICE)
       return
     }
     this.updateLiquid(x, y, m)
@@ -646,26 +720,49 @@ export class Simulation {
       return
     }
     this.life[i] -= 1 + ((Math.random() * 2) | 0)
+
+    // Wet-count snuff. A flame OVERWHELMED by wet matter (>=2 water/steam
+    // 4-neighbors) is drowning: skip re-emission so its heat craters and puff
+    // out to smoke. A flame with at most one wet neighbor (e.g. water directly
+    // above only) is the boil case — it re-emits and boils that neighbor.
+    // Because a boiled neighbor becomes STEAM (itself wet), the edge of a
+    // submerged fire body flips from coolN=1 to coolN>=2 and erodes inward,
+    // instead of surviving forever inside a steam bubble.
+    const coolN = this.wetNeighbors(x, y)
+    if (coolN >= 2) {
+      // a tiny survival chance keeps a drowning edge flickering for a frame
+      // rather than blinking out flatly; mostly it converts straight to smoke.
+      if (Math.random() < 0.92) {
+        this.setCell(x, y, Mat.SMOKE)
+        return
+      }
+      this.wake(x, y)
+      return
+    }
+    // A single coolant neighbor is the boil case (e.g. water directly above):
+    // the flame still re-emits its 1200° (below) and boils that neighbor, but it
+    // also snuffs at a high rate. That erodes the wet EDGE of a submerged body
+    // inward even where each cell touches only one water cell — without it a
+    // pinned body's flat edges (coolN === 1) would survive and boil forever,
+    // only the corners (coolN >= 2) dying. Boiling is near-instant at 1200°, so a
+    // genuine boil-from-below flame still pushes enough heat up before it dies.
+    if (coolN === 1 && Math.random() < 0.7) {
+      this.setCell(x, y, Mat.SMOKE)
+      return
+    }
+
     // re-assert emission temperature (diffusion bled it away last frame); this
     // is what ignites/boils/melts neighbors once it spreads into them.
     if (this.heat[i] < emitTemp[Mat.FIRE]) this.heat[i] = emitTemp[Mat.FIRE]
     this.wake(x, y)
 
-    // Snuff: a flame sitting in heat below its own emission means a cold sink
-    // (water boiling next to it) is winning — puff out to smoke sometimes.
-    if (
-      (this.matAt(x, y - 1) === Mat.WATER ||
-        this.matAt(x, y + 1) === Mat.WATER ||
-        this.matAt(x - 1, y) === Mat.WATER ||
-        this.matAt(x + 1, y) === Mat.WATER) &&
-      Math.random() < 0.25
-    ) {
-      this.setCell(x, y, Mat.SMOKE)
-      return
-    }
-
-    // Flames lick upward.
-    if (Math.random() < 0.5) {
+    // Flames lick upward — but only when touching NO coolant (coolN === 0). A
+    // flame in contact with water/steam can't climb: it can neither bubble up
+    // through what's dousing it nor "drill" a path by boiling a neighbor to
+    // steam and rising into the vacated cell, because it stays coolant-adjacent
+    // the whole way. So a submerged body can't escape to the surface — it stays
+    // put and erodes via the snuff. In dry air it rises freely as before.
+    if (coolN === 0 && Math.random() < 0.5) {
       const first = Math.random() < 0.5 ? -1 : 1
       if (this.tryRise(x, y, x, y - 1, Mat.FIRE)) return
       if (this.tryRise(x, y, x + first, y - 1, Mat.FIRE)) return
@@ -705,23 +802,53 @@ export class Simulation {
     )
   }
 
+  /** true if any 4-neighbor is WATER (wets gunpowder, shielding it from ignition). */
+  private nearWater(x: number, y: number): boolean {
+    return (
+      this.matAt(x, y - 1) === Mat.WATER ||
+      this.matAt(x, y + 1) === Mat.WATER ||
+      this.matAt(x - 1, y) === Mat.WATER ||
+      this.matAt(x + 1, y) === Mat.WATER
+    )
+  }
+
+  /** a WET neighbor (water/steam) that drowns a flame. ICE is excluded on
+   * purpose: fire MELTS ice, it does not drown in it — counting ice here snuffs
+   * the very flames meant to thaw an ice block. */
+  private isWet(m: number): boolean {
+    return m === Mat.WATER || m === Mat.STEAM
+  }
+  /** count of 4-neighbors that are wet (used by the fire snuff + rise gate). */
+  private wetNeighbors(x: number, y: number): number {
+    let n = 0
+    if (this.isWet(this.matAt(x, y - 1))) n++
+    if (this.isWet(this.matAt(x, y + 1))) n++
+    if (this.isWet(this.matAt(x - 1, y))) n++
+    if (this.isWet(this.matAt(x + 1, y))) n++
+    return n
+  }
+
   private updateLava(x: number, y: number): void {
     const i = y * this.W + x
-    // Lava solidifies into a stone crust only where it is BOTH cold enough AND
-    // touching a coolant (water/steam/ice). the coolant gate is the key to not
-    // crusting in open air: pure temperature would also freeze lava surrounded
-    // by air, because air is a colder sink than water, so a thin stream petrifies
-    // mid-fall. requiring real coolant contact keeps airborne lava molten while
-    // still forming a crust where it meets water. CHECKED BEFORE re-emission so
-    // it tests the value last frame's diffusion left behind (re-asserting first
-    // would pin heat to emitTemp and the test could never fire).
-    // (a per-material heat conductivity would model this more cleanly — bd.)
-    if (this.heat[i] <= freezePoint[Mat.LAVA] && this.nearCoolant(x, y)) {
+    const coolantAdjacent = this.nearCoolant(x, y)
+    // Lava solidifies into a stone crust only where it is BOTH cooled below the
+    // quench gate AND touching a coolant (water/steam/ice). The coolant guard is
+    // the key to not crusting in open air: air is a colder sink than water, so a
+    // pure-temperature gate would petrify a thin stream mid-fall. The gate sits
+    // just under the emission temperature (emitTemp - DELTA) because the cooled
+    // solver only craters a water-touching cell ~60°/frame — a deep gate would
+    // never be reached. Checked BEFORE re-emission so it reads the value last
+    // frame's diffusion left behind (re-asserting first would pin it molten).
+    if (coolantAdjacent && this.heat[i] < emitTemp[Mat.LAVA] - LAVA_QUENCH_DELTA) {
       this.setCell(x, y, Mat.STONE)
       return
     }
-    // re-assert emission so the pool stays molten and keeps heating neighbors.
-    if (this.heat[i] < emitTemp[Mat.LAVA]) this.heat[i] = emitTemp[Mat.LAVA]
+    // Re-assert emission so non-coolant lava stays molten and keeps heating its
+    // surroundings — but SUPPRESS it when coolant-adjacent, so a resting cell
+    // against water can actually accumulate cooling below the gate instead of
+    // being re-pinned to emitTemp every frame (which would oscillate just above
+    // the gate and never crust).
+    if (!coolantAdjacent && this.heat[i] < emitTemp[Mat.LAVA]) this.heat[i] = emitTemp[Mat.LAVA]
     this.wake(x, y) // keep lava pools shimmering / reactive
 
     // Viscous: only sometimes flow, and only sluggishly sideways.
@@ -747,7 +874,11 @@ export class Simulation {
   private moveLava(x: number, y: number, tx: number, ty: number): boolean {
     if (!this.tryMove(x, y, tx, ty, Mat.LAVA)) return false
     const ti = ty * this.W + tx
-    if (this.heat[ti] < emitTemp[Mat.LAVA]) this.heat[ti] = emitTemp[Mat.LAVA]
+    // Re-seed the destination molten so a flowing stream stays liquid — but
+    // SUPPRESS it where the destination is coolant-adjacent, mirroring the rest
+    // path, so lava flowing against water can cool toward the crust gate.
+    if (!this.nearCoolant(tx, ty) && this.heat[ti] < emitTemp[Mat.LAVA])
+      this.heat[ti] = emitTemp[Mat.LAVA]
     this.wake(tx, ty)
     return true
   }
@@ -800,7 +931,10 @@ export class Simulation {
     // value (mirrors lava): re-asserting the cold emission first would pin the
     // cell below meltPoint forever. Ice in ambient (20 < meltPoint 40) self-
     // cools and stays frozen; a hot neighbor (fire/lava) overwhelms it.
-    if (this.heat[i] >= meltPoint[Mat.ICE] && Math.random() < 0.1) {
+    // melt probability is high so ice surrounded by fire reliably thaws within
+    // the short window the new (cooling) heat field leaves before the flame
+    // rises away — the lingering heat that used to guarantee it is gone.
+    if (this.heat[i] >= meltPoint[Mat.ICE] && Math.random() < 0.5) {
       this.setCell(x, y, Mat.WATER)
       return
     }
@@ -880,6 +1014,9 @@ export class Simulation {
         return shade(46, 156, 58, (ex % 54) - 22)
       case Mat.ICE:
         return shade(168, 208, 234, (ex % 20) - 10)
+      case Mat.GLASS:
+        // pale blue-green with a faint sheen; low grain so it reads as smooth.
+        return shade(200, 225, 235, (ex % 16) - 8)
       case Mat.GUNPOWDER:
         return shade(64, 62, 70, (ex % 28) - 14)
       case Mat.METAL:

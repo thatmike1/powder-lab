@@ -67,6 +67,8 @@ export const CHIP_STYLES: Record<number, CSSProperties> = {
   },
   [Mat.PLANT]: dots('rgb(46,160,60)', 'rgb(30,128,42)', 'rgb(70,200,84)'),
   [Mat.ICE]: checker('rgb(170,210,235)', 'rgb(150,190,220)', 'rgb(200,230,250)'),
+  // glass: pale pane with a soft diagonal sheen — lighter, smoother than ice.
+  [Mat.GLASS]: checker('rgb(200,225,235)', 'rgb(182,210,222)', 'rgb(224,240,248)'),
 
   [Mat.FIRE]: {
     backgroundColor: 'rgb(200,100,20)',
