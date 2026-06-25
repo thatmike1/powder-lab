@@ -29,24 +29,25 @@ export interface Preset {
   /** one playful line of description. */
   blurb: string
   /** which shelf of the gallery it sits on. */
-  group: 'contraption' | 'painting'
+  group: 'contraption' | 'painting' | 'experimental'
   /** lighting the board adopts on load. */
   light: SceneLight
   /** paint the scene into a fresh W×H material grid and return it. */
   build(W: number, H: number): Uint8Array
 }
 
-// lighting presets, named so the scene table reads cleanly.
-const DRAMA: SceneLight = { light: true, darkness: 0.62 } // glow-forward, dim room
-const NIGHT: SceneLight = { light: true, darkness: 0.74 } // darker, for firelight
-const FLAT: SceneLight = { light: false, darkness: 0.55 } // full material color
+// lighting presets, named so the scene table reads cleanly. exported so the
+// experimental scene pack can share the same vocabulary.
+export const DRAMA: SceneLight = { light: true, darkness: 0.62 } // glow-forward, dim room
+export const NIGHT: SceneLight = { light: true, darkness: 0.74 } // darker, for firelight
+export const FLAT: SceneLight = { light: false, darkness: 0.55 } // full material color
 
 // ---------------------------------------------------------------------------
 // drawing surface: a tiny imperative painter over the flat grid. all geometry
 // is integer pixels; bounds are clamped so a scene can never write out of range.
 // ---------------------------------------------------------------------------
 
-class Painter {
+export class Painter {
   readonly g: Uint8Array
   // a deterministic-enough RNG so a scene looks the same each time it loads.
   private seed: number

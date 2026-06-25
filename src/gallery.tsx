@@ -2,6 +2,10 @@ import { useEffect, useMemo, useRef } from 'react'
 import { CloseIcon } from './pixel-icons'
 import { Mat } from './sim/materials'
 import { PRESETS, type Preset } from './sim/presets'
+import { EXPERIMENTAL } from './sim/presets-experimental'
+
+// the full catalogue: core scenes plus the experimental shelf.
+const ALL_PRESETS: Preset[] = [...PRESETS, ...EXPERIMENTAL]
 
 // thumbnail colors per material — a flat readout of the grid, close to how the
 // board paints each material so a card reads like a tiny screenshot. EMPTY uses
@@ -53,6 +57,7 @@ function renderThumb(preset: Preset, W: number, H: number): string {
 const GROUPS: { key: Preset['group']; title: string }[] = [
   { key: 'contraption', title: 'Contraptions' },
   { key: 'painting', title: 'Paintings' },
+  { key: 'experimental', title: 'Experimental' },
 ]
 
 interface GalleryProps {
@@ -77,7 +82,7 @@ export function Gallery({ open, onClose, onPick, W, H }: GalleryProps) {
   // thumbnails are deterministic; build them once for the lifetime of the app.
   const thumbs = useMemo(() => {
     const map = new Map<string, string>()
-    for (const p of PRESETS) map.set(p.id, renderThumb(p, W, H))
+    for (const p of ALL_PRESETS) map.set(p.id, renderThumb(p, W, H))
     return map
   }, [W, H])
 
@@ -166,7 +171,7 @@ export function Gallery({ open, onClose, onPick, W, H }: GalleryProps) {
 
         <div className="drawer-scroll">
           {GROUPS.map((group) => {
-            const items = PRESETS.filter((p) => p.group === group.key)
+            const items = ALL_PRESETS.filter((p) => p.group === group.key)
             return (
               <section key={group.key} className="scene-group">
                 <div className="scene-ghead">
