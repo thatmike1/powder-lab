@@ -89,10 +89,12 @@ export function Gallery({ open, onClose, onPick, W, H }: GalleryProps) {
     if (open) {
       returnFocus.current = document.activeElement as HTMLElement | null
       // focus the first card so keyboard users land inside the drawer.
+      // preventScroll: the panel is mid-transform, and a focus-driven
+      // scrollIntoView would yank the whole window and stutter the slide-in.
       const first = panel.querySelector<HTMLElement>('.scene-card')
-      first?.focus()
+      first?.focus({ preventScroll: true })
     } else {
-      returnFocus.current?.focus()
+      returnFocus.current?.focus({ preventScroll: true })
     }
   }, [open])
 
