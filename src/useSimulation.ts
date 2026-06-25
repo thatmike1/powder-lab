@@ -264,6 +264,28 @@ export function useSimulation(W: number, H: number, scale: number) {
     URL.revokeObjectURL(url)
   }, [])
 
+  // load a baked-in gallery scene: replace the grid, pause so the painting is
+  // visible before play, drop any shared "#s=" hash so it can't fight the scene,
+  // and adopt the scene's lighting hint so it looks its best on arrival.
+  const loadPreset = useCallback(
+    (cells: Uint8Array, opts?: { light?: boolean; darkness?: number }) => {
+      const sim = simRef.current
+      if (!sim) return
+      if (!sim.restore(cells)) return
+      if (location.hash) history.replaceState(null, '', location.pathname + location.search)
+      cfg.current.running = false
+      if (opts?.light !== undefined) cfg.current.light = opts.light
+      if (opts?.darkness !== undefined) cfg.current.darkness = opts.darkness
+      setUi((u) => ({
+        ...u,
+        running: false,
+        light: cfg.current.light,
+        darkness: cfg.current.darkness,
+      }))
+    },
+    [],
+  )
+
   // load a .powder file, replacing the current grid (and pausing on success).
   const loadScene = useCallback(async (file: File) => {
     const sim = simRef.current
@@ -339,5 +361,6 @@ export function useSimulation(W: number, H: number, scale: number) {
     shareScene,
     saveScene,
     loadScene,
+    loadPreset,
   }
 }

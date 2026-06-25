@@ -1,8 +1,10 @@
-import { type CSSProperties, type ReactNode, useRef } from 'react'
+import { type CSSProperties, type ReactNode, useRef, useState } from 'react'
 import { CHIP_STYLES } from './chip-styles'
+import { Gallery } from './gallery'
 import {
   BrushIcon,
   ClearIcon,
+  GalleryIcon,
   LoadIcon,
   PauseIcon,
   PlayIcon,
@@ -157,9 +159,11 @@ export default function App() {
     shareScene,
     saveScene,
     loadScene,
+    loadPreset,
   } = useSimulation(W, H, SCALE)
 
   const fileRef = useRef<HTMLInputElement | null>(null)
+  const [galleryOpen, setGalleryOpen] = useState(false)
 
   const activeRgb = PALETTE.find((p) => p.id === ui.material)?.rgb ?? DEFAULT_ACCENT
   const darknessPct = Math.round(ui.darkness * 100)
@@ -171,6 +175,17 @@ export default function App() {
         <span className="wordmark">
           POWDER&nbsp;<b>LAB</b>
         </span>
+        <button
+          type="button"
+          className="gallery-open"
+          onClick={() => setGalleryOpen(true)}
+          aria-haspopup="dialog"
+          aria-expanded={galleryOpen}
+          title="Browse ready-made scenes"
+        >
+          <GalleryIcon size={14} />
+          Gallery
+        </button>
         <div className="winctl">
           <button
             type="button"
@@ -349,6 +364,14 @@ export default function App() {
           </div>
         </section>
       </div>
+
+      <Gallery
+        open={galleryOpen}
+        onClose={() => setGalleryOpen(false)}
+        onPick={loadPreset}
+        W={W}
+        H={H}
+      />
     </div>
   )
 }

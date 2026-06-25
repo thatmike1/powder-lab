@@ -123,3 +123,42 @@ export const LoadIcon = ({ size }: IconProps) => (
     ]}
   />
 )
+
+// a pixel X.
+export const CloseIcon = ({ size }: IconProps) => (
+  <PixelIcon
+    size={size}
+    rects={[
+      [1, 1, 1, 1],
+      [2, 2, 1, 1],
+      [3, 3, 1, 1],
+      [4, 4, 1, 1],
+      [5, 5, 1, 1],
+      [6, 6, 1, 1],
+      [6, 1, 1, 1],
+      [5, 2, 1, 1],
+      [4, 3, 1, 1],
+      [3, 4, 1, 1],
+      [2, 5, 1, 1],
+      [1, 6, 1, 1],
+    ]}
+  />
+)
+
+// a framed picture: a sun over two little hills inside a frame.
+export const GalleryIcon = ({ size }: IconProps) => (
+  <PixelIcon
+    size={size}
+    rects={[
+      [0, 0, 8, 1], // top frame
+      [0, 7, 8, 1], // bottom frame
+      [0, 0, 1, 8], // left frame
+      [7, 0, 1, 8], // right frame
+      [2, 2, 1, 1], // sun
+      [4, 5, 1, 1], // peak
+      [5, 4, 1, 1],
+      [6, 5, 1, 1],
+      [2, 6, 4, 1], // hill base
+    ]}
+  />
+)
