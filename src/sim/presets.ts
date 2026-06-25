@@ -252,20 +252,20 @@ function buildVolcano(W: number, H: number): Uint8Array {
 /** a waterfall pouring off a mossy stone cliff into a basin below. */
 function buildWaterfall(W: number, H: number): Uint8Array {
   const p = new Painter(W, H)
-  // the cliff on the left, with a notched lip the water spills over.
-  p.rect(0, 52, 70, H - 1, STONE)
-  p.rect(0, 38, 62, 51, STONE) // raised shoulder holding the source pool
-  p.rect(4, 40, 58, 50, WATER) // the source pool
-  p.rect(58, 44, 70, 51, STONE) // lip
-  p.set(62, 50, WATER) // overflow notch — water tips over here
-  p.rect(60, 50, 62, 52, WATER)
-  // mossy edges.
-  p.rect(0, 36, 62, 37, PLANT)
-  p.speckle(0, 52, 70, 60, PLANT, 0.15)
-  // the lower basin: a stone lip on the right keeps a pool.
+  // a tall stone cliff on the left; its shelf top is at y=52.
+  p.rect(0, 52, 54, H - 1, STONE)
+  // a back wall taller than the shelf, damming the reservoir on the left.
+  p.rect(0, 28, 8, 52, STONE)
+  // the reservoir sits on the shelf with its right side OPEN — so on play it
+  // tips over the cliff's edge and cascades down into the basin below.
+  p.rect(9, 32, 52, 51, WATER)
+  // moss on the rim and down the cliff face.
+  p.rect(0, 26, 8, 27, PLANT)
+  p.speckle(0, 52, 54, 60, PLANT, 0.16)
+  // the catch basin: a stone floor with a tall right wall to hold the pool.
   p.floor(132, STONE)
-  p.rect(150, 110, 158, 131, STONE)
-  p.rect(70, 118, 150, 131, WATER)
+  p.rect(150, 100, 158, 131, STONE)
+  p.rect(55, 116, 150, 131, WATER) // a starting pool the fall keeps feeding
   return p.g
 }
 
@@ -300,13 +300,15 @@ function buildPowderKeg(W: number, H: number): Uint8Array {
   }
   barrel(118, 150, 110)
   barrel(155, 182, 116)
-  // the fuse: a powder trail rising and snaking to a spark.
-  p.line(134, 110, 110, 78, GUNPOWDER, 0)
-  p.line(110, 78, 70, 66, GUNPOWDER, 0)
-  p.line(70, 66, 48, 50, GUNPOWDER, 0)
-  // the spark.
-  p.disc(46, 48, 2, FIRE)
-  p.speckle(42, 42, 50, 52, FIRE, 0.4)
+  // the fuse: a fat powder trail snaking up to a spark. it has to be a few cells
+  // thick — a 1px fuse loses heat to the cooling field faster than it ignites,
+  // so the flame fizzles instead of racing down it.
+  p.line(134, 110, 110, 78, GUNPOWDER, 2)
+  p.line(110, 78, 70, 66, GUNPOWDER, 2)
+  p.line(70, 66, 48, 50, GUNPOWDER, 2)
+  // the spark, sitting right on the end of the fuse.
+  p.disc(48, 50, 3, FIRE)
+  p.speckle(42, 44, 54, 56, FIRE, 0.4)
   return p.g
 }
 
@@ -369,14 +371,17 @@ function buildLavaLamp(W: number, H: number): Uint8Array {
 /** a sieve of staggered shelves; a reservoir of sand cascades down through it. */
 function buildSandMaze(W: number, H: number): Uint8Array {
   const p = new Painter(W, H)
-  p.frame(28, 14, W - 28, H - 4, WALL, 3) // outer box
-  p.rect(31, 17, W - 31, 40, SAND) // the reservoir
-  // staggered shelves: each leaves a gap on the opposite side so sand zigzags.
-  for (let i = 0; i < 6; i++) {
-    const y = 50 + i * 16
-    if (i % 2 === 0) p.rect(31, y, W - 64, y + 2, WALL)
-    else p.rect(64, y, W - 31, y + 2, WALL)
-  }
+  // a funnel box: side walls + floor, open at the top.
+  p.rect(28, 14, 30, H - 4, WALL)
+  p.rect(W - 30, 14, W - 28, H - 4, WALL)
+  p.rect(28, H - 6, W - 28, H - 4, WALL)
+  // a hopper of sand up top, waiting to be released.
+  p.rect(72, 16, 128, 46, SAND)
+  // angled ramps, not flat shelves: sand slides down each and tips off the low
+  // end into the next, zigzagging its way to the floor (flat shelves just let it
+  // settle into static layers).
+  p.line(31, 58, 144, 92, WALL, 1) // tips off the right
+  p.line(W - 31, 104, 56, 138, WALL, 1) // tips off the left
   return p.g
 }
 
