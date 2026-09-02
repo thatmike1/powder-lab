@@ -64,6 +64,14 @@ points into one event and sends at most ~20 events per second; the points still
 apply one at a time, in order, so the stroke looks identical. The server does not
 parse event payloads, so this shape costs it nothing.
 
+Both events also accept an optional `segs` field: a stroke whose brush radius or
+material changes partway through is carried as several segments inside one
+event, rather than forcing a flush per change. Without it, holding the pointer
+while cycling materials on the keyboard emits one message per sampled point,
+measured at 108 per second. The field is additive and optional; a single-segment
+event is exactly the shape the table above describes, and the server still never
+parses a payload.
+
 `magnet` needs the same treatment for a different reason: it is a force applied
 per sample, so throttling it to 20 events per second without batching makes the
 in-room magnet pull about a third as hard as the offline one. Batching the
