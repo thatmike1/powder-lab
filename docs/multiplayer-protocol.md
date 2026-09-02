@@ -47,7 +47,7 @@ all of them must be routed through the network layer while in a room:
 | type      | payload                          | Simulation call            |
 |-----------|----------------------------------|----------------------------|
 | `paint`   | `{pts: [x0,y0,x1,y1,...], r, mat}` | `paint(x, y, r, mat)` per point, in order |
-| `magnet`  | `{x, y, r, attract}`             | `magnet(x, y, r, attract)` |
+| `magnet`  | `{pts: [x0,y0,x1,y1,...], r, attract}` | `magnet(x, y, r, attract)` per point, in order |
 | `strike`  | `{x, y}`                         | `strike(x, y)`             |
 | `clear`   | `{}`                             | `clear()`                  |
 | `setState`| `{state: base64}`                | `loadState(bytes)`         |
@@ -57,12 +57,24 @@ all of them must be routed through the network layer while in a room:
 format. It is what a preset load, a `.powder` file load, and a desync resync all
 send. Loading a scene inside a room is therefore a room-wide event.
 
-`paint` carries a flat list of points rather than a single one. A held pointer
+`paint` and `magnet` both carry a flat list of points rather than a single one. A held pointer
 emits a stroke every rendered frame, and one message per frame per client is
 about 60 per second of pure overhead. The client coalesces a stroke's sampled
 points into one event and sends at most ~20 events per second; the points still
 apply one at a time, in order, so the stroke looks identical. The server does not
 parse event payloads, so this shape costs it nothing.
+
+`magnet` needs the same treatment for a different reason: it is a force applied
+per sample, so throttling it to 20 events per second without batching makes the
+in-room magnet pull about a third as hard as the offline one. Batching the
+samples keeps the force identical on both sides of a connection.
+
+The client also prefixes the opaque `state` blob with its own small header
+carrying the room tick and the pause flag, because pause separates the room
+clock from the simulation clock (the room tick must keep following the server,
+or the resume input's `applyTick` is never reached and the room deadlocks) and
+the simulation's own bytes only know the simulation tick. The server never looks
+inside the blob, so this costs it nothing either.
 
 Ordering: the server stamps a monotonically increasing sequence number on every
 input. Events sharing an `applyTick` are applied in ascending `seq` order on
