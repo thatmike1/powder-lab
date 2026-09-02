@@ -44,8 +44,8 @@ server and the client implement that document.
 ## Tasks
 | id | state | owned paths | job |
 |----|-------|-------------|-----|
-| T1 | REPORTED(DONE) | src/sim/{Simulation.ts,rng.ts,state.ts,determinism.test.ts} | T1-determinism |
-| T2 | DISPATCHED | server/**, package.json, package-lock.json, vitest.config.ts | T2-relay |
+| T1 | REPORTED(DONE) → VERIFYING | src/sim/{Simulation.ts,rng.ts,state.ts,determinism.test.ts} | T1-determinism |
+| T2 | REPORTED(DONE) → VERIFYING | server/**, package.json, package-lock.json, vitest.config.ts | T2-relay |
 | T3 | PENDING | src/net/**, src/useSimulation.ts | — |
 | T4 | PENDING | src/App.tsx, src/styles.css, src/RoomBar.tsx | — |
 
@@ -53,7 +53,8 @@ server and the client implement that document.
 | task | # | seat | ticket rev | outcome | checks | evidence | when |
 |------|---|------|-----------|---------|--------|----------|------|
 | T1 | 1 | opus/high | rev1 | DONE | npm test 46/46, build clean, zero Math.random | commit 89a55b3, report T1-determinism.md | 2026-09-02 18:12 |
-| T2 | 1 | opus/med | rev1 | dispatched | — | — | 2026-09-02 18:10 |
+| T2 | 1 | opus/med | rev1 | DONE | npm test 80/80, build clean, server typecheck ok, 2-client e2e | commit 9828c44, report T2-relay.md | 2026-09-02 18:16 |
+| W1 | 1 | orchestra-verifier (opus, inherit) | rev1 | dispatched | — | — | 2026-09-02 18:18 |
 
 ## Decisions
 - 2026-09-02: lockstep over server-authoritative. Bandwidth forced it.
@@ -64,6 +65,16 @@ server and the client implement that document.
 - 2026-09-02: v1 runs locally (`npm run server`). VPS deployment deferred.
 
 ## Open items (fold into the fix wave after verification)
+- T2: no cursor rate limit — a hostile peer can flood cursor frames and the
+  server fans them out. Every other hostile-input guard is in place and tested.
+- T2: `npm run build` does not typecheck `server/` (root tsconfig `include` is
+  `["src","vite.config.ts"]`, outside T2's write set). `server/tsconfig.json`
+  exists and passes; chain it into the build script.
+- T2: no ping/pong heartbeat, so a half-open socket leaves a ghost peer holding
+  room authority.
+- T2 design note for T3: a desync `setState` goes only to the disagreeing peers
+  but still consumes a room `seq`, so healthy peers observe a gap. `seq` is an
+  ordering key, never a completeness check. T3 must not treat a gap as loss.
 - Snapshot cadence: the protocol says the server refreshes its stored state from
   the authority every ~10 s. At ~360 kB base64 that is ~36 kB/s of upstream from
   one client for nothing. Change to on-demand only: ask the authority when a late
