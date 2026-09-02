@@ -46,8 +46,8 @@ server and the client implement that document.
 |----|-------|-------------|-----|
 | T1 | VERIFIED | src/sim/{Simulation.ts,rng.ts,state.ts,determinism.test.ts} | T1-determinism |
 | T2 | VERIFIED (notes → FIX1) | server/**, package.json, package-lock.json, vitest.config.ts | T2-relay |
-| T3 | REPORTED(DONE) → VERIFYING | src/net/**, src/useSimulation.ts | T3-netcode |
-| T4 | PENDING | src/App.tsx, src/styles.css, src/RoomBar.tsx | — |
+| T3 | VERIFIED (notes → FIX2) | src/net/**, src/useSimulation.ts | T3-netcode |
+| T4 | DISPATCHED | src/App.tsx, src/styles.css, new UI files | T4-room-ui |
 
 ## Verifier findings routed
 - F1 build does not typecheck server → FIX1
@@ -68,7 +68,9 @@ server and the client implement that document.
 | W1 | 1 | orchestra-verifier (opus, inherit) | rev1 | PASS_WITH_NOTES — all 20 criteria PASS | verifier re-ran npm test 80/80 + build; own 2-client e2e; own determinism harness | report V1-wave1.md; tree clean, HEAD unchanged after | 2026-09-02 18:26 |
 | T3 | 1 | opus/high | rev1 | DONE | npm test 116/116, build clean, 2-client e2e identical checksum 3716015013 @ tick 433, 0 desyncs | commit bf843e2, report T3-netcode.md | 2026-09-02 18:43 |
 | FIX1 | 1 | opus/med | rev1 | DONE | red-to-green shown for all 5 findings; server tests 49/49 re-run by conductor | commit e962522, report FIX1-server.md | 2026-09-02 18:30 |
-| W2 | 1 | orchestra-verifier (opus, inherit) | rev1 | dispatched | — | — | 2026-09-02 18:45 |
+| W2 | 1 | orchestra-verifier (opus, inherit) | rev1 | PASS — all 17 criteria | own e2e vs real relay: 2-client and 3-client runs converge, forced desync recovers, paused resync converges; npm test 116/116; build gate proven to catch a server type error | report V2-wave2.md; tree clean | 2026-09-02 18:58 |
+| T4 | 1 | opus/med | rev1 | dispatched | — | — | 2026-09-02 19:00 |
+| FIX2 | 1 | opus/med | rev1 | dispatched | — | — | 2026-09-02 19:00 |
 
 ## Decisions
 - 2026-09-02: lockstep over server-authoritative. Bandwidth forced it.
@@ -104,6 +106,17 @@ server and the client implement that document.
   one client for nothing. Change to on-demand only: ask the authority when a late
   joiner arrives or a desync is detected. T2 is implementing the timed version as
   originally spec'd; this is a follow-up edit, not a T2 failure.
+
+## Known, accepted, not fixed
+- V2 finding 4: a `pendingResync` peer that inherits authority becomes the room
+  reference, so a state just flagged as wrong can become truth. Correct per the
+  server's own "an authority is its own reference" rule and unreachable at two
+  peers. Revisit before peer counts grow.
+- No auto-rejoin after a socket drop. Deliberate for v1.
+- Not verified anywhere: rooms above 3 peers, real packet loss or added latency,
+  float32 bit-identity across different CPUs and JS engines (only within one Node
+  build so far). The last one is the real long-term risk in a browser-to-browser
+  lockstep design and deserves a cross-machine test before anyone calls this shippable.
 
 ## Scratch
 `.orchestra/scratch/`
