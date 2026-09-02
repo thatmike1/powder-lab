@@ -10,7 +10,9 @@ import {
   Mat,
   meltPoint,
 } from './materials'
+import { DEFAULT_SEED, Rng } from './rng'
 import { encodeRLE } from './scene'
+import { decodeState, encodeState } from './state'
 
 const CS = 16 // chunk size (cells per side)
 
@@ -75,6 +77,11 @@ export class Simulation {
   heat: Float32Array // temperature per cell; diffuses each frame (Eulerian)
   private heatNext: Float32Array // double buffer for Jacobi-style diffusion
 
+  // the single seeded random stream every probabilistic rule draws from. its
+  // state word is part of the serialized state, so a late joiner resumes the
+  // exact same sequence its peers are on.
+  private rng: Rng
+
   frame = 0
   count = 0
   emissive = 0 // fire/lava cell count this frame; lets render() skip glow passes
@@ -99,9 +106,10 @@ export class Simulation {
   private blurCanvas: HTMLCanvasElement
   private blurCtx: CanvasRenderingContext2D
 
-  constructor(W: number, H: number) {
+  constructor(W: number, H: number, seed: number = DEFAULT_SEED) {
     this.W = W
     this.H = H
+    this.rng = new Rng(seed)
     const n = W * H
     this.cells = new Uint8Array(n)
     this.life = new Uint8Array(n)
@@ -109,7 +117,7 @@ export class Simulation {
     this.stamp = new Int32Array(n).fill(-1)
     this.heat = new Float32Array(n).fill(AMBIENT)
     this.heatNext = new Float32Array(n)
-    for (let i = 0; i < n; i++) this.extra[i] = (Math.random() * 256) | 0
+    for (let i = 0; i < n; i++) this.extra[i] = (this.rng.next() * 256) | 0
 
     this.chunkW = Math.ceil(W / CS)
     this.chunkH = Math.ceil(H / CS)
@@ -163,11 +171,11 @@ export class Simulation {
   }
 
   private assignSpawnLife(i: number, mat: number): void {
-    if (mat === Mat.FIRE) this.life[i] = 90 + ((Math.random() * 50) | 0)
-    else if (mat === Mat.SMOKE) this.life[i] = 90 + ((Math.random() * 100) | 0)
-    else if (mat === Mat.STEAM) this.life[i] = Math.min(255, 130 + ((Math.random() * 120) | 0))
+    if (mat === Mat.FIRE) this.life[i] = 90 + ((this.rng.next() * 50) | 0)
+    else if (mat === Mat.SMOKE) this.life[i] = 90 + ((this.rng.next() * 100) | 0)
+    else if (mat === Mat.STEAM) this.life[i] = Math.min(255, 130 + ((this.rng.next() * 120) | 0))
     else if (mat === Mat.LIGHTNING)
-      this.life[i] = 5 + ((Math.random() * 5) | 0) // brief flash
+      this.life[i] = 5 + ((this.rng.next() * 5) | 0) // brief flash
     else this.life[i] = 0
   }
 
@@ -180,7 +188,7 @@ export class Simulation {
   private setCell(x: number, y: number, mat: number): void {
     const i = y * this.W + x
     this.cells[i] = mat
-    this.extra[i] = (Math.random() * 256) | 0
+    this.extra[i] = (this.rng.next() * 256) | 0
     this.assignSpawnLife(i, mat)
     this.assignSpawnHeat(i, mat)
     this.stamp[i] = this.frame
@@ -286,16 +294,16 @@ export class Simulation {
       if (this.zap(x, y)) return // hit ground / solid / edge
       if (y >= this.H - 1) return // reached the floor
       const pull = this.conductorPull(x, y)
-      const jitter = Math.random() < 0.34 ? -1 : Math.random() < 0.5 ? 1 : 0
+      const jitter = this.rng.next() < 0.34 ? -1 : this.rng.next() < 0.5 ? 1 : 0
       let dx = jitter + pull
       dx = dx < -1 ? -1 : dx > 1 ? 1 : dx
-      const dy = Math.random() < 0.82 ? 1 : 0
+      const dy = this.rng.next() < 0.82 ? 1 : 0
       const nx = x + dx
       let ny = y + dy
       if (nx === x && ny === y) ny = y + 1 // never stall in place
       // fork a child bolt sideways now and then for that branched look
-      if (depth < 2 && Math.random() < 0.07) {
-        this.bolt(x + (Math.random() < 0.5 ? -1 : 1), y + 1, depth + 1, maxSteps >> 1)
+      if (depth < 2 && this.rng.next() < 0.07) {
+        this.bolt(x + (this.rng.next() < 0.5 ? -1 : 1), y + 1, depth + 1, maxSteps >> 1)
       }
       x = nx
       y = ny
@@ -401,7 +409,7 @@ export class Simulation {
     this.life.fill(0)
     this.heat.fill(AMBIENT)
     for (let i = 0; i < n; i++) {
-      this.extra[i] = (Math.random() * 256) | 0
+      this.extra[i] = (this.rng.next() * 256) | 0
       // fire/smoke/steam need a lifespan or they'd die on the first frame.
       this.assignSpawnLife(i, this.cells[i])
       // re-seed source temperatures so fire/lava/ice load at the right heat.
@@ -410,6 +418,93 @@ export class Simulation {
     this.stamp.fill(-1)
     this.activeNext.fill(1)
     return true
+  }
+
+  /**
+   * the simulation clock: number of completed `stepOnce()` calls. this is the
+   * same counter as `frame` (one frame per step) — `stamp` stores frame numbers
+   * and is compared against it, so they are deliberately one value, not two
+   * that could drift apart across a `loadState`.
+   */
+  get tick(): number {
+    return this.frame
+  }
+
+  /**
+   * serialize the COMPLETE simulation state — everything a peer needs to
+   * continue this exact simulation, not just what it looks like. that is
+   * `cells`, `life`, `extra`, `heat`, `stamp`, the chunk-activity queues, the
+   * PRNG state word and the tick. deliberately not the RLE scene format, which
+   * carries `cells` only and would desync a late joiner within a few ticks.
+   */
+  serializeState(): Uint8Array<ArrayBuffer> {
+    return encodeState({
+      W: this.W,
+      H: this.H,
+      tick: this.frame,
+      rngState: this.rng.getState(),
+      cells: this.cells,
+      life: this.life,
+      extra: this.extra,
+      active: this.active,
+      activeNext: this.activeNext,
+      stamp: this.stamp,
+      heat: this.heat,
+    })
+  }
+
+  /**
+   * adopt a state produced by {@link serializeState}, replacing everything.
+   * returns false (leaving this sim untouched) on bad magic, an unknown
+   * version or a dimension mismatch, the same convention as {@link restore}.
+   * unlike `restore` this re-seeds nothing: the point is to become byte-identical
+   * to the peer that produced the bytes.
+   */
+  loadState(bytes: Uint8Array): boolean {
+    let st: ReturnType<typeof decodeState>
+    try {
+      st = decodeState(bytes)
+    } catch {
+      return false
+    }
+    if (st.W !== this.W || st.H !== this.H) return false
+    if (st.active.length !== this.active.length) return false
+    this.cells.set(st.cells)
+    this.life.set(st.life)
+    this.extra.set(st.extra)
+    this.stamp.set(st.stamp)
+    this.heat.set(st.heat)
+    this.active.set(st.active)
+    this.activeNext.set(st.activeNext)
+    this.rng.setState(st.rngState)
+    this.frame = st.tick
+    return true
+  }
+
+  /**
+   * FNV-1a 32-bit over `cells`, `life`, `extra` and then `heat` quantized to
+   * `Math.round(heat * 4) | 0` (four little-endian bytes each), in that order.
+   * peers exchange this every few hundred ticks; a mismatch means a desync.
+   * heat is quantized because it is the one float field, and bit-identical
+   * floats are a stronger claim than the protocol needs.
+   */
+  checksum(): number {
+    let h = 0x811c9dc5
+    const mix = (b: number): void => {
+      h = Math.imul(h ^ (b & 0xff), 0x01000193)
+    }
+    const n = this.W * this.H
+    for (let i = 0; i < n; i++) mix(this.cells[i])
+    for (let i = 0; i < n; i++) mix(this.life[i])
+    for (let i = 0; i < n; i++) mix(this.extra[i])
+    for (let i = 0; i < n; i++) {
+      const q = Math.round(this.heat[i] * 4) | 0
+      mix(q)
+      mix(q >> 8)
+      mix(q >> 16)
+      mix(q >> 24)
+    }
+    return h >>> 0
   }
 
   step(times = 1): void {
@@ -540,7 +635,7 @@ export class Simulation {
       case Mat.SAND:
         // sustained lava heat fuses sand into glass; probabilistic so a pool
         // forms a glass crust gradually rather than flashing the whole bed.
-        if (this.heat[i] >= meltPoint[Mat.SAND] && Math.random() < 0.05) {
+        if (this.heat[i] >= meltPoint[Mat.SAND] && this.rng.next() < 0.05) {
           this.setCell(x, y, Mat.GLASS)
           return
         }
@@ -565,7 +660,7 @@ export class Simulation {
         this.updateWater(x, y, i, m)
         return
       case Mat.OIL:
-        if (this.heat[i] >= ignitionPoint[Mat.OIL] && Math.random() < 0.3) {
+        if (this.heat[i] >= ignitionPoint[Mat.OIL] && this.rng.next() < 0.3) {
           this.setCell(x, y, Mat.FIRE)
           return
         }
@@ -590,11 +685,11 @@ export class Simulation {
         this.updateSteam(x, y, i)
         return
       case Mat.WOOD:
-        if (this.heat[i] >= ignitionPoint[Mat.WOOD] && Math.random() < 0.1)
+        if (this.heat[i] >= ignitionPoint[Mat.WOOD] && this.rng.next() < 0.1)
           this.setCell(x, y, Mat.FIRE)
         return
       case Mat.PLANT:
-        if (this.heat[i] >= ignitionPoint[Mat.PLANT] && Math.random() < 0.12) {
+        if (this.heat[i] >= ignitionPoint[Mat.PLANT] && this.rng.next() < 0.12) {
           this.setCell(x, y, Mat.FIRE)
           return
         }
@@ -640,14 +735,14 @@ export class Simulation {
 
   private updatePowder(x: number, y: number, m: number): void {
     if (this.tryMove(x, y, x, y + 1, m)) return
-    const first = Math.random() < 0.5 ? -1 : 1
+    const first = this.rng.next() < 0.5 ? -1 : 1
     if (this.tryMove(x, y, x + first, y + 1, m)) return
     if (this.tryMove(x, y, x - first, y + 1, m)) return
   }
 
   private updateLiquid(x: number, y: number, m: number): void {
     if (this.tryMove(x, y, x, y + 1, m)) return
-    const first = Math.random() < 0.5 ? -1 : 1
+    const first = this.rng.next() < 0.5 ? -1 : 1
     if (this.tryMove(x, y, x + first, y + 1, m)) return
     if (this.tryMove(x, y, x - first, y + 1, m)) return
     // Horizontal spread to seek its own level.
@@ -663,7 +758,7 @@ export class Simulation {
     this.life[i]--
     this.wake(x, y) // stay awake while alive (so it keeps fading even if stuck)
     const m = this.cells[i]
-    const first = Math.random() < 0.5 ? -1 : 1
+    const first = this.rng.next() < 0.5 ? -1 : 1
     if (this.tryRise(x, y, x, y - 1, m)) return
     if (this.tryRise(x, y, x + first, y - 1, m)) return
     if (this.tryRise(x, y, x - first, y - 1, m)) return
@@ -679,7 +774,7 @@ export class Simulation {
    * neighbors — it reacts only to its own cell temperature.
    */
   private updateWater(x: number, y: number, i: number, m: number): void {
-    if (this.heat[i] >= boilPoint[Mat.WATER] && Math.random() < 0.4) {
+    if (this.heat[i] >= boilPoint[Mat.WATER] && this.rng.next() < 0.4) {
       this.setCell(x, y, Mat.STEAM) // boil -> steam (carries the hot temp up)
       return
     }
@@ -706,7 +801,7 @@ export class Simulation {
    * instead, so only a little water drizzles back and the loop never sustains.
    */
   private updateSteam(x: number, y: number, i: number): void {
-    if (this.heat[i] <= freezePoint[Mat.STEAM] && Math.random() < 0.02) {
+    if (this.heat[i] <= freezePoint[Mat.STEAM] && this.rng.next() < 0.02) {
       this.setCell(x, y, Mat.WATER) // condense — occasional water-cycle close
       return
     }
@@ -716,10 +811,10 @@ export class Simulation {
   private updateFire(x: number, y: number, i: number): void {
     if (this.life[i] <= 0) {
       // Burn out into a puff of smoke most of the time.
-      this.setCell(x, y, Math.random() < 0.6 ? Mat.SMOKE : Mat.EMPTY)
+      this.setCell(x, y, this.rng.next() < 0.6 ? Mat.SMOKE : Mat.EMPTY)
       return
     }
-    this.life[i] -= 1 + ((Math.random() * 2) | 0)
+    this.life[i] -= 1 + ((this.rng.next() * 2) | 0)
 
     // Wet-count snuff. A flame OVERWHELMED by wet matter (>=2 water/steam
     // 4-neighbors) is drowning: skip re-emission so its heat craters and puff
@@ -732,7 +827,7 @@ export class Simulation {
     if (coolN >= 2) {
       // a tiny survival chance keeps a drowning edge flickering for a frame
       // rather than blinking out flatly; mostly it converts straight to smoke.
-      if (Math.random() < 0.92) {
+      if (this.rng.next() < 0.92) {
         this.setCell(x, y, Mat.SMOKE)
         return
       }
@@ -746,7 +841,7 @@ export class Simulation {
     // pinned body's flat edges (coolN === 1) would survive and boil forever,
     // only the corners (coolN >= 2) dying. Boiling is near-instant at 1200°, so a
     // genuine boil-from-below flame still pushes enough heat up before it dies.
-    if (coolN === 1 && Math.random() < 0.7) {
+    if (coolN === 1 && this.rng.next() < 0.7) {
       this.setCell(x, y, Mat.SMOKE)
       return
     }
@@ -762,8 +857,8 @@ export class Simulation {
     // steam and rising into the vacated cell, because it stays coolant-adjacent
     // the whole way. So a submerged body can't escape to the surface — it stays
     // put and erodes via the snuff. In dry air it rises freely as before.
-    if (coolN === 0 && Math.random() < 0.5) {
-      const first = Math.random() < 0.5 ? -1 : 1
+    if (coolN === 0 && this.rng.next() < 0.5) {
+      const first = this.rng.next() < 0.5 ? -1 : 1
       if (this.tryRise(x, y, x, y - 1, Mat.FIRE)) return
       if (this.tryRise(x, y, x + first, y - 1, Mat.FIRE)) return
     }
@@ -778,7 +873,7 @@ export class Simulation {
     // compare BEFORE subtracting: life is a Uint8Array, so decrementing past 0
     // wraps to ~255 and the bolt cell would flash forever (and never let its
     // chunk sleep). its short lifespan lands on that boundary almost every time.
-    const dec = 1 + ((Math.random() * 2) | 0)
+    const dec = 1 + ((this.rng.next() * 2) | 0)
     if (this.life[i] <= dec) {
       this.setCell(x, y, Mat.EMPTY)
       return
@@ -852,12 +947,12 @@ export class Simulation {
     this.wake(x, y) // keep lava pools shimmering / reactive
 
     // Viscous: only sometimes flow, and only sluggishly sideways.
-    if (Math.random() < 0.6) {
+    if (this.rng.next() < 0.6) {
       if (this.moveLava(x, y, x, y + 1)) return
-      const first = Math.random() < 0.5 ? -1 : 1
+      const first = this.rng.next() < 0.5 ? -1 : 1
       if (this.moveLava(x, y, x + first, y + 1)) return
       if (this.moveLava(x, y, x - first, y + 1)) return
-      if (Math.random() < 0.3) {
+      if (this.rng.next() < 0.3) {
         if (this.moveLava(x, y, x + first, y)) return
         if (this.moveLava(x, y, x - first, y)) return
       }
@@ -894,9 +989,9 @@ export class Simulation {
       const nx = x + dx,
         ny = y + dy
       if (nx < 0 || ny < 0 || nx >= this.W || ny >= this.H) continue
-      if (isDissolvable(this.cells[ny * this.W + nx]) && Math.random() < 0.25) {
+      if (isDissolvable(this.cells[ny * this.W + nx]) && this.rng.next() < 0.25) {
         this.setCell(nx, ny, Mat.EMPTY)
-        if (Math.random() < 0.4) {
+        if (this.rng.next() < 0.4) {
           this.setCell(x, y, Mat.SMOKE)
           return
         } // acid spent
@@ -907,7 +1002,7 @@ export class Simulation {
   }
 
   private growPlant(x: number, y: number): void {
-    if (Math.random() > 0.012) return
+    if (this.rng.next() > 0.012) return
     const dirs = [
       [0, -1],
       [0, 1],
@@ -934,7 +1029,7 @@ export class Simulation {
     // melt probability is high so ice surrounded by fire reliably thaws within
     // the short window the new (cooling) heat field leaves before the flame
     // rises away — the lingering heat that used to guarantee it is gone.
-    if (this.heat[i] >= meltPoint[Mat.ICE] && Math.random() < 0.5) {
+    if (this.heat[i] >= meltPoint[Mat.ICE] && this.rng.next() < 0.5) {
       this.setCell(x, y, Mat.WATER)
       return
     }
@@ -954,7 +1049,7 @@ export class Simulation {
           ny = y + dy
         if (nx < 0 || ny < 0 || nx >= this.W || ny >= this.H) continue
         if (this.cells[ny * this.W + nx] === Mat.WALL) continue // walls survive
-        this.setCell(nx, ny, Math.random() < 0.7 ? Mat.FIRE : Mat.EMPTY)
+        this.setCell(nx, ny, this.rng.next() < 0.7 ? Mat.FIRE : Mat.EMPTY)
       }
     }
   }
