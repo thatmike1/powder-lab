@@ -46,7 +46,7 @@ server and the client implement that document.
 |----|-------|-------------|-----|
 | T1 | VERIFIED | src/sim/{Simulation.ts,rng.ts,state.ts,determinism.test.ts} | T1-determinism |
 | T2 | VERIFIED (notes → FIX1) | server/**, package.json, package-lock.json, vitest.config.ts | T2-relay |
-| T3 | DISPATCHED | src/net/**, src/useSimulation.ts | T3-netcode |
+| T3 | REPORTED(DONE) → VERIFYING | src/net/**, src/useSimulation.ts | T3-netcode |
 | T4 | PENDING | src/App.tsx, src/styles.css, src/RoomBar.tsx | — |
 
 ## Verifier findings routed
@@ -66,8 +66,9 @@ server and the client implement that document.
 | T1 | 1 | opus/high | rev1 | DONE | npm test 46/46, build clean, zero Math.random | commit 89a55b3, report T1-determinism.md | 2026-09-02 18:12 |
 | T2 | 1 | opus/med | rev1 | DONE | npm test 80/80, build clean, server typecheck ok, 2-client e2e | commit 9828c44, report T2-relay.md | 2026-09-02 18:16 |
 | W1 | 1 | orchestra-verifier (opus, inherit) | rev1 | PASS_WITH_NOTES — all 20 criteria PASS | verifier re-ran npm test 80/80 + build; own 2-client e2e; own determinism harness | report V1-wave1.md; tree clean, HEAD unchanged after | 2026-09-02 18:26 |
-| T3 | 1 | opus/high | rev1 | dispatched | — | — | 2026-09-02 18:28 |
-| FIX1 | 1 | opus/med | rev1 | dispatched | — | — | 2026-09-02 18:28 |
+| T3 | 1 | opus/high | rev1 | DONE | npm test 116/116, build clean, 2-client e2e identical checksum 3716015013 @ tick 433, 0 desyncs | commit bf843e2, report T3-netcode.md | 2026-09-02 18:43 |
+| FIX1 | 1 | opus/med | rev1 | DONE | red-to-green shown for all 5 findings; server tests 49/49 re-run by conductor | commit e962522, report FIX1-server.md | 2026-09-02 18:30 |
+| W2 | 1 | orchestra-verifier (opus, inherit) | rev1 | dispatched | — | — | 2026-09-02 18:45 |
 
 ## Decisions
 - 2026-09-02: lockstep over server-authoritative. Bandwidth forced it.
@@ -78,6 +79,16 @@ server and the client implement that document.
 - 2026-09-02: v1 runs locally (`npm run server`). VPS deployment deferred.
 
 ## Open items (fold into the fix wave after verification)
+- T3: magnet is throttled to 20 Hz in a room and pulls ~1/3 as hard as offline,
+  because `magnet` has no point list the way `paint` does. Needs a protocol
+  amendment (conductor) plus a small client change. This is the only behavioural
+  regression inside a room. → FIX2, dispatched alongside T4.
+- T3: reconnection is detection only. A dropped socket sets status 'error' and
+  the loop reverts to single-player. No auto-rejoin in v1; deliberate.
+- T3 extended the opaque `state` base64 with an 8-byte client-side header
+  carrying room tick + pause flag, because pause splits the room clock from the
+  sim clock and the doc's replay rule assumes one number. Server unaffected.
+  Amend the doc.
 - T2: no cursor rate limit — a hostile peer can flood cursor frames and the
   server fans them out. Every other hostile-input guard is in place and tested.
 - T2: `npm run build` does not typecheck `server/` (root tsconfig `include` is
