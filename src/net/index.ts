@@ -28,17 +28,19 @@ export {
   type SessionHooks,
   type SimLike,
 } from './session'
+export { shouldBuildSim } from './sim-lifetime'
 export {
   base64ToBytes,
   bytesToBase64,
   decodeStateEnvelope,
   encodeStateEnvelope,
+  type StateEnvelope,
+  type StateLook,
 } from './state-envelope'
-export { shouldBuildSim } from './sim-lifetime'
 export {
   FLUSH_MS,
-  MagnetBatcher,
   MAX_POINTS,
+  MagnetBatcher,
   type PointBatcherOptions,
   StrokeBatcher,
 } from './stroke-batcher'

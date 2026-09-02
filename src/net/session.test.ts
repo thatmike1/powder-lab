@@ -3,6 +3,7 @@ import { Mat } from '../sim/materials'
 import { Simulation } from '../sim/Simulation'
 import { INPUT_DELAY, type PeerId, TICK_MS } from './protocol'
 import { NetSession } from './session'
+import { encodeStateEnvelope, type StateLook } from './state-envelope'
 import type { Connect, TransportHandlers } from './transport'
 
 const W = 40
@@ -93,7 +94,12 @@ class FakeRelay {
 
 function makePeer(relay: FakeRelay) {
   let sim: Simulation | null = null
-  const state = { running: true, loads: 0 }
+  const state: { running: boolean; loads: number; look: StateLook } = {
+    running: true,
+    loads: 0,
+    // the host's live render config; a scene's look overwrites it on every peer
+    look: { light: true, darkness: 0.55 },
+  }
   const session = new NetSession({
     url: 'ws://fake',
     connect: relay.connect,
@@ -108,6 +114,9 @@ function makePeer(relay: FakeRelay) {
     isRunning: () => state.running,
     setRunning: (on) => {
       state.running = on
+    },
+    setLook: (look) => {
+      state.look = { ...look }
     },
     onStateLoaded: () => {
       state.loads++
@@ -181,6 +190,48 @@ describe('NetSession', () => {
     expect(a.session.roomTick).toBe(b.session.roomTick)
     expect(filled(a.sim())).toBeGreaterThan(0)
     expect(a.sim().checksum()).toBe(b.sim().checksum())
+  })
+
+  it('gives every peer the scene look when one of them loads a preset', () => {
+    const relay = new FakeRelay()
+    const a = makePeer(relay)
+    const b = makePeer(relay)
+    const peers = [a, b]
+    run(relay, peers, 200)
+
+    // exactly what useSimulation's loadPreset does inside a room: build the
+    // scene state off the live one, tag it with the gallery scene's authored
+    // look, and broadcast. the picking client applies nothing locally.
+    const scratch = new Simulation(W, H)
+    scratch.loadState(a.sim().serializeState())
+    const cells = new Uint8Array(W * H)
+    for (let i = 0; i < 100; i++) cells[i] = Mat.SAND
+    scratch.restore(cells)
+    const look: StateLook = { light: false, darkness: 0.2 }
+    const state = encodeStateEnvelope(a.session.roomTick, false, scratch.serializeState(), look)
+    a.session.sendInput({ type: 'setState', state, reason: 'load' })
+    a.session.sendInput({ type: 'running', on: false })
+    run(relay, peers, 500)
+
+    // the grid agrees (this already held) AND so does the picture
+    expect(a.sim().checksum()).toBe(b.sim().checksum())
+    expect(filled(a.sim())).toBe(100)
+    expect(a.state.look).toEqual(look)
+    expect(b.state.look).toEqual(look)
+  })
+
+  it('leaves each peer its own look when a corrective state carries none', () => {
+    const relay = new FakeRelay()
+    const a = makePeer(relay)
+    const b = makePeer(relay)
+    const peers = [a, b]
+    run(relay, peers, 200)
+    b.state.look = { light: false, darkness: 0.9 }
+    const state = a.session.serializeEnvelope()
+    expect(state).not.toBeNull()
+    relay.pushSetState('p1', state as string, 'p0')
+    run(relay, peers, 500)
+    expect(b.state.look).toEqual({ light: false, darkness: 0.9 })
   })
 
   it('pauses the room for everyone through a running input', () => {

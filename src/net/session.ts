@@ -12,7 +12,7 @@ import {
   type StampedInput,
 } from './protocol'
 import { InputScheduler } from './scheduler'
-import { decodeStateEnvelope, encodeStateEnvelope } from './state-envelope'
+import { decodeStateEnvelope, encodeStateEnvelope, type StateLook } from './state-envelope'
 import { type Connect, connectWebSocket, defaultRelayUrl, type Transport } from './transport'
 
 /** a corrective state this soon after joining is the join handshake, not a desync */
@@ -42,6 +42,11 @@ export interface SessionHooks {
   isRunning: () => boolean
   /** room-global pause arriving as an input; the host mirrors it into its UI */
   setRunning: (on: boolean) => void
+  /**
+   * a loaded scene brought its own lighting; the host adopts it so every peer
+   * renders the same picture. only fired when the state carries a look.
+   */
+  setLook?: (look: StateLook) => void
   /** a full state was adopted, so anything derived from the grid is stale */
   onStateLoaded?: () => void
 }
@@ -251,6 +256,10 @@ export class NetSession {
    * the relay stamped with the tick every peer, this one included, applies it at.
    */
   sendInput(event: InputEvent): boolean {
+    // by design there is no local echo: points handed over here are lost if the
+    // socket dies before the relay echoes them back, so a drop can eat up to
+    // INPUT_DELAY worth of a stroke. that is inherent to lockstep without
+    // rollback and is not a bug to chase.
     if (!this.connected) return false
     this.send({ type: 'input', event })
     return true
@@ -414,13 +423,18 @@ export class NetSession {
       case 'running':
         this.hooks?.setRunning(event.on)
         break
-      case 'setState':
+      case 'setState': {
         // a scene or preset load: everyone adopts the same bytes at this tick,
-        // so the room clock is untouched and nothing is replayed.
-        if (sim.loadState(unwrap(event.state) ?? new Uint8Array(0))) {
+        // so the room clock is untouched and nothing is replayed. the scene's
+        // authored lighting rides along in the envelope, because applying it
+        // locally on the picking client alone left peers on a different picture.
+        const envelope = decodeStateEnvelope(event.state)
+        if (envelope !== null && sim.loadState(envelope.state)) {
+          if (envelope.look !== null) this.hooks?.setLook?.(envelope.look)
           this.hooks?.onStateLoaded?.()
         }
         break
+      }
     }
   }
 
@@ -446,6 +460,7 @@ export class NetSession {
     this.tick = envelope.roomTick
     this.lastChecksumTick = -1
     this.hooks?.setRunning(envelope.running)
+    if (envelope.look !== null) this.hooks?.setLook?.(envelope.look)
     this.scheduler.requeueAfter(envelope.roomTick)
     this.hooks?.onStateLoaded?.()
     return true
@@ -483,9 +498,4 @@ export function applyPointEvent(sim: SimLike, event: PaintEvent | MagnetEvent): 
     for (let n = 0; n < seg.n && p + 1 < pts.length; n++, p += 2)
       call(pts[p], pts[p + 1], seg.r, seg.k)
   }
-}
-
-/** decode the sim bytes out of a state envelope, or null if it is not one */
-function unwrap(state: string): Uint8Array | null {
-  return decodeStateEnvelope(state)?.state ?? null
 }

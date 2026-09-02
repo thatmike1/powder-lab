@@ -3,8 +3,9 @@ import {
   applyPointEvent,
   encodeStateEnvelope,
   MagnetBatcher,
-  shouldBuildSim,
+  type StateLook,
   StrokeBatcher,
+  shouldBuildSim,
   useNet,
 } from './net'
 import { Mat, PALETTE } from './sim/materials'
@@ -136,6 +137,11 @@ export function useSimulation(W: number, H: number, scale: number) {
       setRunning: (on) => {
         cfg.current.running = on
         setUi((u) => (u.running === on ? u : { ...u, running: on }))
+      },
+      setLook: (look) => {
+        cfg.current.light = look.light
+        cfg.current.darkness = look.darkness
+        setUi((u) => ({ ...u, light: look.light, darkness: look.darkness }))
       },
       onStateLoaded: () => {
         setUi((u) => ({ ...u, count: simRef.current?.count ?? u.count }))
@@ -301,10 +307,14 @@ export function useSimulation(W: number, H: number, scale: number) {
         }
         if (steps > 0) simRef.current?.step(steps)
       }
-      // "Faucet": holding the pointer still keeps emitting (great for fluids/fire).
-      if (pointer.current.down) paintAt(pointer.current.x, pointer.current.y, now)
+      // buffered points go out FIRST. in the single frame where the socket dies,
+      // paintAt takes the local branch immediately, so polling after it would
+      // write the newest point to the grid ahead of the older buffered ones the
+      // fallback is about to apply.
       strokes.poll(now)
       magnets.poll(now)
+      // "Faucet": holding the pointer still keeps emitting (great for fluids/fire).
+      if (pointer.current.down) paintAt(pointer.current.x, pointer.current.y, now)
       // joining a room swaps the simulation, so read it back after the step.
       const sim = simRef.current
       if (sim) {
@@ -391,13 +401,13 @@ export function useSimulation(W: number, H: number, scale: number) {
   // A room-wide scene swap: build the state everyone will adopt WITHOUT touching
   // the live grid, since the sender waits for the broadcast like every peer.
   const stateForCells = useCallback(
-    (cells: Uint8Array): string | null => {
+    (cells: Uint8Array, look: StateLook | null = null): string | null => {
       const sim = simRef.current
       if (!sim) return null
       const scratch = new Simulation(W, H)
       if (!scratch.loadState(sim.serializeState())) return null
       if (!scratch.restore(cells)) return null
-      return encodeStateEnvelope(session.roomTick, false, scratch.serializeState())
+      return encodeStateEnvelope(session.roomTick, false, scratch.serializeState(), look)
     },
     [session, W, H],
   )
@@ -438,23 +448,36 @@ export function useSimulation(W: number, H: number, scale: number) {
     (cells: Uint8Array, opts?: { light?: boolean; darkness?: number }) => {
       const sim = simRef.current
       if (!sim) return
-      // lighting is a local render preference, so it applies either way.
-      const applyLook = () => {
+      // a shared "#s=" hash would fight the scene on the next reload; dropping it
+      // is purely local and happens on whichever client picked.
+      const dropHash = () => {
         if (location.hash) history.replaceState(null, '', location.pathname + location.search)
-        if (opts?.light !== undefined) cfg.current.light = opts.light
-        if (opts?.darkness !== undefined) cfg.current.darkness = opts.darkness
-        setUi((u) => ({ ...u, light: cfg.current.light, darkness: cfg.current.darkness }))
+      }
+      // the scene's authored look, resolved against whatever is live so the
+      // envelope always carries a complete pair.
+      const look: StateLook = {
+        light: opts?.light ?? cfg.current.light,
+        darkness: opts?.darkness ?? cfg.current.darkness,
+      }
+      const applyLook = () => {
+        cfg.current.light = look.light
+        cfg.current.darkness = look.darkness
+        setUi((u) => ({ ...u, light: look.light, darkness: look.darkness }))
       }
       if (session.connected) {
-        const state = stateForCells(cells)
+        // inside a room the look travels with the state and comes back for every
+        // peer, this client included — applying it here as well would put the
+        // picker ahead of the room by the input delay.
+        const state = stateForCells(cells, look)
         if (state === null) return
         session.sendInput({ type: 'setState', state, reason: 'load' })
         session.sendInput({ type: 'running', on: false })
-        applyLook()
+        dropHash()
         return
       }
       if (!sim.restore(cells)) return
       cfg.current.running = false
+      dropHash()
       applyLook()
       setUi((u) => ({ ...u, running: false }))
     },
