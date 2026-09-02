@@ -1,9 +1,10 @@
 import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
 
-// On GitHub Pages the app is served from /powder-lab/, but locally we want
-// it at the root, so only apply the base path for production builds.
+// GitHub Pages serves the app from /powder-lab/, the self-hosted deploy serves
+// it from the domain root, and `npm run dev` wants the root too. VITE_BASE lets
+// a deploy say which without editing this file.
 export default defineConfig(({ command }) => ({
-  base: command === 'build' ? '/powder-lab/' : '/',
+  base: process.env.VITE_BASE ?? (command === 'build' ? '/powder-lab/' : '/'),
   plugins: [react()],
 }))

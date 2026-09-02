@@ -25,8 +25,16 @@ export type RelayServer = {
 export function startRelay(
   port = Number(process.env.PORT ?? 8787),
   heartbeatMs = HEARTBEAT_MS,
+  host = process.env.HOST,
 ): RelayServer {
-  const wss = new WebSocketServer({ port, maxPayload: MAX_MESSAGE_BYTES })
+  // HOST pins the listener to one interface. behind a reverse proxy that is the
+  // docker gateway, so the relay is never reachable from the internet directly;
+  // unset (the local default) it listens on everything.
+  const wss = new WebSocketServer({
+    port,
+    ...(host ? { host } : {}),
+    maxPayload: MAX_MESSAGE_BYTES,
+  })
   const registry = new RoomRegistry()
   const sockets = new Map<PeerId, WebSocket>()
   /** peers that have answered a ping since the last heartbeat sweep */
