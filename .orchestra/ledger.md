@@ -44,7 +44,7 @@ server and the client implement that document.
 ## Tasks
 | id | state | owned paths | job |
 |----|-------|-------------|-----|
-| T1 | DISPATCHED | src/sim/{Simulation.ts,rng.ts,state.ts,determinism.test.ts} | T1-determinism |
+| T1 | REPORTED(DONE) | src/sim/{Simulation.ts,rng.ts,state.ts,determinism.test.ts} | T1-determinism |
 | T2 | DISPATCHED | server/**, package.json, package-lock.json, vitest.config.ts | T2-relay |
 | T3 | PENDING | src/net/**, src/useSimulation.ts | — |
 | T4 | PENDING | src/App.tsx, src/styles.css, src/RoomBar.tsx | — |
@@ -52,7 +52,7 @@ server and the client implement that document.
 ## Attempts
 | task | # | seat | ticket rev | outcome | checks | evidence | when |
 |------|---|------|-----------|---------|--------|----------|------|
-| T1 | 1 | opus/high | rev1 | dispatched | — | — | 2026-09-02 18:10 |
+| T1 | 1 | opus/high | rev1 | DONE | npm test 46/46, build clean, zero Math.random | commit 89a55b3, report T1-determinism.md | 2026-09-02 18:12 |
 | T2 | 1 | opus/med | rev1 | dispatched | — | — | 2026-09-02 18:10 |
 
 ## Decisions
@@ -62,6 +62,13 @@ server and the client implement that document.
 - 2026-09-02: cursors are cosmetic, outside lockstep, rendered as a DOM overlay
   so no ticket needs to touch `Simulation.render`.
 - 2026-09-02: v1 runs locally (`npm run server`). VPS deployment deferred.
+
+## Open items (fold into the fix wave after verification)
+- Snapshot cadence: the protocol says the server refreshes its stored state from
+  the authority every ~10 s. At ~360 kB base64 that is ~36 kB/s of upstream from
+  one client for nothing. Change to on-demand only: ask the authority when a late
+  joiner arrives or a desync is detected. T2 is implementing the timed version as
+  originally spec'd; this is a follow-up edit, not a T2 failure.
 
 ## Scratch
 `.orchestra/scratch/`

@@ -73,10 +73,19 @@ Full state must carry, in one byte stream with its own magic and version:
 - `cells` (Uint8Array), `life` (Uint8Array), `extra` (Uint8Array)
 - `heat` (Float32Array)
 - `stamp` (Int32Array)
+- `active` and `activeNext` (Uint8Array, the chunk-activity queues)
 - the PRNG state word
 - the current `tick`
 
-Compression beyond a straight byte dump is optional for v1.
+The chunk-activity queues are load-bearing and easy to miss. Cells inside a
+sleeping chunk draw no random numbers, so a joiner that woke every chunk on load
+would run its PRNG ahead of its peers and desync. `heatNext` is correctly absent:
+`diffuse()` opens with a full `heatNext.set(heat)`, so it carries nothing across
+a tick.
+
+Compression beyond a straight byte dump is optional for v1. A 200x150 grid
+encodes to roughly 270 kB uncompressed, ~360 kB base64 — cheap enough to send on
+join, expensive enough that it should never be sent on a timer.
 
 ## Checksums and desync
 
