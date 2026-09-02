@@ -1,4 +1,5 @@
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { StrokeBatcher, encodeStateEnvelope, useNet } from './net'
 import { Mat, PALETTE } from './sim/materials'
 import { Simulation } from './sim/Simulation'
 import { decodeRLE, readSceneFromHash, sceneToHash } from './sim/scene'
@@ -14,6 +15,8 @@ export interface SimUiState {
   speed: number
   fps: number
   count: number
+  /** true inside a room, where speed is pinned to 1 and single-stepping is off */
+  speedLocked: boolean
 }
 
 // Mutable config the render loop reads each frame WITHOUT triggering React
@@ -29,9 +32,32 @@ interface Config {
   speed: number
 }
 
+// Catch-up clamp for the networked loop. Bigger than the local MAX_STEPS because
+// a fresh joiner can legitimately be a few hundred ticks behind the room clock
+// and has to sprint; still bounded so a hopeless client never freezes the tab.
+const MAX_CATCHUP = 32
+
+// Magnet is a force applied per event, and unlike a stroke its payload cannot
+// carry a point list, so it is throttled to the same ~20 Hz budget as paint.
+const MAGNET_MS = 50
+
+/**
+ * a fresh seed per page load. the engine is seeded now (lockstep needs every
+ * client drawing the same numbers), and a constant seed would make every visit
+ * replay byte for byte. inside a room the server's seed replaces this one.
+ */
+function freshSeed(): number {
+  const buf = new Uint32Array(1)
+  if (globalThis.crypto?.getRandomValues) globalThis.crypto.getRandomValues(buf)
+  else buf[0] = Date.now() ^ ((Math.random() * 0xffffffff) | 0)
+  return buf[0] >>> 0 || 1
+}
+
 export function useSimulation(W: number, H: number, scale: number) {
   const canvasRef = useRef<HTMLCanvasElement | null>(null)
   const simRef = useRef<Simulation | null>(null)
+  const seedRef = useRef<number>(freshSeed())
+  const { session, net } = useNet()
   const cfg = useRef<Config>({
     running: true,
     material: Mat.SAND,
@@ -57,15 +83,55 @@ export function useSimulation(W: number, H: number, scale: number) {
     speed: 1,
     fps: 0,
     count: 0,
+    speedLocked: false,
   })
+
+  // Batches a held stroke's per-frame samples into ~20 wire events a second.
+  // Local painting never goes through it — see paintAt.
+  const strokes = useMemo(
+    () => new StrokeBatcher({ send: (event) => session.sendInput(event) }),
+    [session],
+  )
+
+  // The netcode drives the simulation it does not own: it needs the live sim
+  // (joining a room replaces it with one on the room's seed), the pause flag it
+  // shares with everyone in the room, and a nudge when a full state lands.
+  useEffect(() => {
+    session.attach({
+      getSim: () => simRef.current,
+      reseed: (seed) => {
+        seedRef.current = seed
+        const sim = new Simulation(W, H, seed)
+        simRef.current = sim
+        return sim
+      },
+      isRunning: () => cfg.current.running,
+      setRunning: (on) => {
+        cfg.current.running = on
+        setUi((u) => (u.running === on ? u : { ...u, running: on }))
+      },
+      onStateLoaded: () => {
+        setUi((u) => ({ ...u, count: simRef.current?.count ?? u.count }))
+      },
+    })
+    return () => session.detach()
+  }, [session, W, H])
+
+  // Speed is pinned to 1 inside a room: a client stepping faster than its peers
+  // diverges by definition.
+  useEffect(() => {
+    if (!net.connected) return
+    cfg.current.speed = 1
+    setUi((u) => ({ ...u, speed: 1, speedLocked: true }))
+    return () => setUi((u) => ({ ...u, speedLocked: false }))
+  }, [net.connected])
 
   useEffect(() => {
     const canvas = canvasRef.current
     if (!canvas) return
     const ctx = canvas.getContext('2d', { alpha: false })
     if (!ctx) return
-    const sim = new Simulation(W, H)
-    simRef.current = sim
+    simRef.current = new Simulation(W, H, seedRef.current)
 
     // hydrate from a shared "#s=..." link, if present. shared scenes start
     // paused so the viewer sees the exact saved arrangement before pressing play.
@@ -73,7 +139,7 @@ export function useSimulation(W: number, H: number, scale: number) {
     if (fromHash) {
       try {
         const { cells } = decodeRLE(fromHash)
-        if (sim.restore(cells)) {
+        if (simRef.current.restore(cells)) {
           cfg.current.running = false
           setUi((u) => ({ ...u, running: false }))
         }
@@ -89,20 +155,33 @@ export function useSimulation(W: number, H: number, scale: number) {
       const gy = Math.floor(((clientY - rect.top) / rect.height) * H)
       return { gx, gy }
     }
-    const paintAt = (gx: number, gy: number) => {
+    let lastMagnet = Number.NEGATIVE_INFINITY
+    const paintAt = (gx: number, gy: number, now: number) => {
       const c = cfg.current
+      const sim = simRef.current
+      if (!sim) return
       // Magnet is a force tool, not a paint: left-drag attracts filings, right-
       // drag repels (so right-click does NOT erase while Magnet is selected).
       // Intercepted before the erase->EMPTY mapping below.
       if (c.material === Mat.MAGNET) {
-        sim.magnet(gx, gy, c.brush, !pointer.current.erase)
+        const attract = !pointer.current.erase
+        if (session.connected) {
+          if (now - lastMagnet < MAGNET_MS) return
+          lastMagnet = now
+          session.sendInput({ type: 'magnet', x: gx, y: gy, r: c.brush, attract })
+        } else {
+          sim.magnet(gx, gy, c.brush, attract)
+        }
         return
       }
       const mat = pointer.current.erase ? Mat.EMPTY : c.material
       // Lightning isn't paintable — it's a click-triggered strike (see onDown),
       // so skip it here or a held/dragged pointer would strobe bolts every frame.
       if (mat === Mat.LIGHTNING) return
-      sim.paint(gx, gy, c.brush, mat)
+      // In a room nothing touches the grid locally: the stroke goes out as an
+      // input and comes back stamped with the tick every peer applies it at.
+      if (session.connected) strokes.add(now, gx, gy, c.brush, mat)
+      else sim.paint(gx, gy, c.brush, mat)
     }
 
     const onDown = (e: PointerEvent) => {
@@ -111,30 +190,43 @@ export function useSimulation(W: number, H: number, scale: number) {
         canvas.setPointerCapture(e.pointerId)
       } catch {}
       const { gx, gy } = toGrid(e.clientX, e.clientY)
+      const now = performance.now()
       pointer.current.down = true
       pointer.current.erase = e.button === 2 // right-click erases
       pointer.current.x = gx
       pointer.current.y = gy
       // one bolt per click; paintAt no-ops for lightning so drags don't re-strike
-      if (!pointer.current.erase && cfg.current.material === Mat.LIGHTNING) sim.strike(gx, gy)
-      else paintAt(gx, gy)
+      if (!pointer.current.erase && cfg.current.material === Mat.LIGHTNING) {
+        if (session.connected) session.sendInput({ type: 'strike', x: gx, y: gy })
+        else simRef.current?.strike(gx, gy)
+      } else {
+        paintAt(gx, gy, now)
+      }
     }
     const onMove = (e: PointerEvent) => {
-      if (!pointer.current.down) return
       const { gx, gy } = toGrid(e.clientX, e.clientY)
+      // presence is cosmetic and outside lockstep — throttled inside the session.
+      session.sendCursor(gx, gy)
+      if (!pointer.current.down) return
+      const now = performance.now()
       // Interpolate so fast strokes don't leave gaps.
       const px = pointer.current.x,
         py = pointer.current.y
       const steps = Math.max(Math.abs(gx - px), Math.abs(gy - py))
       for (let s = 1; s <= steps; s++) {
-        paintAt(Math.round(px + ((gx - px) * s) / steps), Math.round(py + ((gy - py) * s) / steps))
+        paintAt(
+          Math.round(px + ((gx - px) * s) / steps),
+          Math.round(py + ((gy - py) * s) / steps),
+          now,
+        )
       }
-      if (steps === 0) paintAt(gx, gy)
+      if (steps === 0) paintAt(gx, gy, now)
       pointer.current.x = gx
       pointer.current.y = gy
     }
     const onUp = (e: PointerEvent) => {
       pointer.current.down = false
+      strokes.flush(performance.now())
       try {
         canvas.releasePointerCapture(e.pointerId)
       } catch {}
@@ -162,7 +254,12 @@ export function useSimulation(W: number, H: number, scale: number) {
       let dt = now - last
       last = now
       if (dt > 250) dt = 250 // tab was backgrounded — don't replay the whole gap
-      if (c.running) {
+      if (session.connected) {
+        // In a room the clock is the server's, not this tab's: fast-forward when
+        // behind, stall when ahead, and never step on our own accumulator.
+        acc = 0
+        session.advance(MAX_CATCHUP)
+      } else if (c.running) {
         acc += dt * c.speed
         let steps = Math.floor(acc / STEP_MS)
         acc -= steps * STEP_MS
@@ -171,19 +268,24 @@ export function useSimulation(W: number, H: number, scale: number) {
           steps = MAX_STEPS
           acc = 0
         }
-        if (steps > 0) sim.step(steps)
+        if (steps > 0) simRef.current?.step(steps)
       }
       // "Faucet": holding the pointer still keeps emitting (great for fluids/fire).
-      if (pointer.current.down) paintAt(pointer.current.x, pointer.current.y)
-      // heatmap is a render-time flag on the sim, kept out of render()'s args.
-      sim.setShowTemp(c.showTemp)
-      sim.render(ctx, scale, c.glow, c.light, c.darkness)
+      if (pointer.current.down) paintAt(pointer.current.x, pointer.current.y, now)
+      strokes.poll(now)
+      // joining a room swaps the simulation, so read it back after the step.
+      const sim = simRef.current
+      if (sim) {
+        // heatmap is a render-time flag on the sim, kept out of render()'s args.
+        sim.setShowTemp(c.showTemp)
+        sim.render(ctx, scale, c.glow, c.light, c.darkness)
+      }
       frames++
       if (now - fpsT > 500) {
         const fps = Math.round((frames * 1000) / (now - fpsT))
         frames = 0
         fpsT = now
-        setUi((u) => ({ ...u, fps, count: sim.count }))
+        setUi((u) => ({ ...u, fps, count: sim?.count ?? u.count }))
       }
       raf = requestAnimationFrame(loop)
     }
@@ -197,7 +299,7 @@ export function useSimulation(W: number, H: number, scale: number) {
       canvas.removeEventListener('contextmenu', onCtx)
       simRef.current = null
     }
-  }, [W, H, scale])
+  }, [W, H, scale, session, strokes])
 
   // ---- setters: update both the live config ref AND the UI mirror --------
   const setMaterial = useCallback((m: number) => {
@@ -208,14 +310,24 @@ export function useSimulation(W: number, H: number, scale: number) {
     cfg.current.brush = b
     setUi((u) => ({ ...u, brush: b }))
   }, [])
-  const setSpeed = useCallback((s: number) => {
-    cfg.current.speed = s
-    setUi((u) => ({ ...u, speed: s }))
-  }, [])
+  const setSpeed = useCallback(
+    (s: number) => {
+      // pinned inside a room; the control is disabled there anyway.
+      if (session.connected) return
+      cfg.current.speed = s
+      setUi((u) => ({ ...u, speed: s }))
+    },
+    [session],
+  )
+  // Pause is room-global: it travels as an input and comes back for everyone.
   const toggleRunning = useCallback(() => {
+    if (session.connected) {
+      session.sendInput({ type: 'running', on: !cfg.current.running })
+      return
+    }
     cfg.current.running = !cfg.current.running
     setUi((u) => ({ ...u, running: cfg.current.running }))
-  }, [])
+  }, [session])
   const toggleGlow = useCallback(() => {
     cfg.current.glow = !cfg.current.glow
     setUi((u) => ({ ...u, glow: cfg.current.glow }))
@@ -232,8 +344,29 @@ export function useSimulation(W: number, H: number, scale: number) {
     cfg.current.darkness = d
     setUi((u) => ({ ...u, darkness: d }))
   }, [])
-  const stepOnce = useCallback(() => simRef.current?.step(1), [])
-  const clear = useCallback(() => simRef.current?.clear(), [])
+  // Single-stepping is local by definition, so it is unavailable in a room.
+  const stepOnce = useCallback(() => {
+    if (session.connected) return
+    simRef.current?.step(1)
+  }, [session])
+  const clear = useCallback(() => {
+    if (session.connected) session.sendInput({ type: 'clear' })
+    else simRef.current?.clear()
+  }, [session])
+
+  // A room-wide scene swap: build the state everyone will adopt WITHOUT touching
+  // the live grid, since the sender waits for the broadcast like every peer.
+  const stateForCells = useCallback(
+    (cells: Uint8Array): string | null => {
+      const sim = simRef.current
+      if (!sim) return null
+      const scratch = new Simulation(W, H)
+      if (!scratch.loadState(sim.serializeState())) return null
+      if (!scratch.restore(cells)) return null
+      return encodeStateEnvelope(session.roomTick, false, scratch.serializeState())
+    },
+    [session, W, H],
+  )
 
   // serialize the grid into the URL hash and copy a shareable link. falls back
   // to leaving the hash in the address bar when the clipboard is unavailable.
@@ -271,38 +404,57 @@ export function useSimulation(W: number, H: number, scale: number) {
     (cells: Uint8Array, opts?: { light?: boolean; darkness?: number }) => {
       const sim = simRef.current
       if (!sim) return
+      // lighting is a local render preference, so it applies either way.
+      const applyLook = () => {
+        if (location.hash) history.replaceState(null, '', location.pathname + location.search)
+        if (opts?.light !== undefined) cfg.current.light = opts.light
+        if (opts?.darkness !== undefined) cfg.current.darkness = opts.darkness
+        setUi((u) => ({ ...u, light: cfg.current.light, darkness: cfg.current.darkness }))
+      }
+      if (session.connected) {
+        const state = stateForCells(cells)
+        if (state === null) return
+        session.sendInput({ type: 'setState', state, reason: 'load' })
+        session.sendInput({ type: 'running', on: false })
+        applyLook()
+        return
+      }
       if (!sim.restore(cells)) return
-      if (location.hash) history.replaceState(null, '', location.pathname + location.search)
       cfg.current.running = false
-      if (opts?.light !== undefined) cfg.current.light = opts.light
-      if (opts?.darkness !== undefined) cfg.current.darkness = opts.darkness
-      setUi((u) => ({
-        ...u,
-        running: false,
-        light: cfg.current.light,
-        darkness: cfg.current.darkness,
-      }))
+      applyLook()
+      setUi((u) => ({ ...u, running: false }))
     },
-    [],
+    [session, stateForCells],
   )
 
   // load a .powder file, replacing the current grid (and pausing on success).
-  const loadScene = useCallback(async (file: File) => {
-    const sim = simRef.current
-    if (!sim) return
-    try {
-      const bytes = new Uint8Array(await file.arrayBuffer())
-      const { W: sw, H: sh, cells } = decodeRLE(bytes)
-      if (!sim.restore(cells)) {
-        alert(`That scene is ${sw}×${sh}, but this board is ${sim.W}×${sim.H}.`)
-        return
+  const loadScene = useCallback(
+    async (file: File) => {
+      const sim = simRef.current
+      if (!sim) return
+      try {
+        const bytes = new Uint8Array(await file.arrayBuffer())
+        const { W: sw, H: sh, cells } = decodeRLE(bytes)
+        if (cells.length !== sim.W * sim.H) {
+          alert(`That scene is ${sw}×${sh}, but this board is ${sim.W}×${sim.H}.`)
+          return
+        }
+        if (session.connected) {
+          const state = stateForCells(cells)
+          if (state === null) return
+          session.sendInput({ type: 'setState', state, reason: 'load' })
+          session.sendInput({ type: 'running', on: false })
+          return
+        }
+        if (!sim.restore(cells)) return
+        cfg.current.running = false
+        setUi((u) => ({ ...u, running: false }))
+      } catch {
+        alert("Couldn't read that file — it doesn't look like a Powder Lab scene.")
       }
-      cfg.current.running = false
-      setUi((u) => ({ ...u, running: false }))
-    } catch {
-      alert("Couldn't read that file — it doesn't look like a Powder Lab scene.")
-    }
-  }, [])
+    },
+    [session, stateForCells],
+  )
 
   // Keyboard shortcuts.
   useEffect(() => {
@@ -348,6 +500,8 @@ export function useSimulation(W: number, H: number, scale: number) {
   return {
     canvasRef,
     ui,
+    /** multiplayer surface for the UI: connection, room, peers, cursors */
+    net,
     setMaterial,
     setBrush,
     setSpeed,
