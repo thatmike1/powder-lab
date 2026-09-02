@@ -2,7 +2,8 @@
 
 A falling-sand sandbox in the browser — paint ~14 materials and watch them flow, burn, dissolve, and react. Built with React + TypeScript + Vite, with the entire 60fps simulation running on a plain canvas *outside* React's render cycle.
 
-### ▶ [Play it live](https://thatmike1.github.io/powder-lab/)
+### ▶ [Play it live](https://powder.ssscribe.app/) — multiplayer, start a room and share the link
+### ▶ [Single-player mirror](https://thatmike1.github.io/powder-lab/) (GitHub Pages, no relay)
 
 ![Powder Lab — basin scene](.preview/scene-1.png)
 
@@ -72,6 +73,10 @@ load, pause — goes over the wire rather than being applied locally first. Room
 speed is pinned to 1x for the same reason. Clients checksum their grid every 300
 ticks; a mismatch pulls a fresh snapshot from the oldest peer and replays the
 inputs since.
+
+Deployed at [powder.ssscribe.app](https://powder.ssscribe.app/): the static
+bundle behind Caddy, the relay as a systemd service reachable only through the
+proxy at `/relay`. The GitHub Pages build has no relay, so it is single-player.
 
 `docs/multiplayer-protocol.md` is the full specification. `server/` is a plain
 `ws` relay that stamps, orders and forwards opaque blobs; it never parses a
