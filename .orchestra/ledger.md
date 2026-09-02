@@ -46,8 +46,8 @@ server and the client implement that document.
 |----|-------|-------------|-----|
 | T1 | VERIFIED | src/sim/{Simulation.ts,rng.ts,state.ts,determinism.test.ts} | T1-determinism |
 | T2 | VERIFIED (notes → FIX1) | server/**, package.json, package-lock.json, vitest.config.ts | T2-relay |
-| T3 | VERIFIED (notes → FIX2) | src/net/**, src/useSimulation.ts | T3-netcode |
-| T4 | DISPATCHED | src/App.tsx, src/styles.css, new UI files | T4-room-ui |
+| T3 | VERIFIED | src/net/**, src/useSimulation.ts | T3-netcode |
+| T4 | VERIFIED | src/App.tsx, src/styles.css, new UI files | T4-room-ui |
 
 ## Verifier findings routed
 - F1 build does not typecheck server → FIX1
@@ -69,8 +69,10 @@ server and the client implement that document.
 | T3 | 1 | opus/high | rev1 | DONE | npm test 116/116, build clean, 2-client e2e identical checksum 3716015013 @ tick 433, 0 desyncs | commit bf843e2, report T3-netcode.md | 2026-09-02 18:43 |
 | FIX1 | 1 | opus/med | rev1 | DONE | red-to-green shown for all 5 findings; server tests 49/49 re-run by conductor | commit e962522, report FIX1-server.md | 2026-09-02 18:30 |
 | W2 | 1 | orchestra-verifier (opus, inherit) | rev1 | PASS — all 17 criteria | own e2e vs real relay: 2-client and 3-client runs converge, forced desync recovers, paused resync converges; npm test 116/116; build gate proven to catch a server type error | report V2-wave2.md; tree clean | 2026-09-02 18:58 |
-| T4 | 1 | opus/med | rev1 | dispatched | — | — | 2026-09-02 19:00 |
-| FIX2 | 1 | opus/med | rev1 | dispatched | — | — | 2026-09-02 19:00 |
+| T4 | 1 | opus/med | rev1 | DONE | 2 real tabs: create + URL join, roster, cursor tracking, paint mirrored 456 particles both sides | commit dbdd22d | 2026-09-02 19:05 |
+| FIX2 | 1 | opus/med | rev1 | DONE | magnet parity 8.611 == 8.611; 108 ev/s → 19 under key-mashing, 0 points lost; e2e 368 ticks 0 mismatches | commit 88ea38b | 2026-09-02 19:05 |
+| W3 | 1 | orchestra-verifier (opus, inherit) | rev1 | PASS_WITH_NOTES — 15 criteria, F1 user-visible | own playwright run, 2-3 real browser tabs + logging ws proxy reading the clients' own checksum frames; 133/133; build clean | report V3-final.md | 2026-09-02 19:25 |
+| FIX3 | 1 | opus/med | rev1 | DONE | red-to-green on F1; 2-browser canvas sha1 identical after preset pick, both tabs Light off / Darkness 55% | commit 5e1c175 | 2026-09-02 19:32 |
 
 ## Decisions
 - 2026-09-02: lockstep over server-authoritative. Bandwidth forced it.
@@ -107,7 +109,24 @@ server and the client implement that document.
   joiner arrives or a desync is detected. T2 is implementing the timed version as
   originally spec'd; this is a follow-up edit, not a T2 failure.
 
+## Outcome
+All four planned tasks VERIFIED, three fix waves applied, three blind
+verification passes run. Final verifier's answer to "is a v1 of multiplayer
+powder-lab delivered?" was yes, with one user-visible defect (F1, preset
+lighting) which FIX3 then fixed and proved with pixel-identical canvas hashes.
+Disclosure: FIX3 itself was self-reviewed by the conductor (diff read + gates
+re-run), not blind-verified. Every other accepted change was blind-verified by
+a fresh-context verifier on the same model.
+
 ## Known, accepted, not fixed
+- A client joining a room AFTER someone picked a gallery scene gets the right
+  grid but keeps its own lighting toggles. `serializeEnvelope` deliberately
+  carries no look, so a desync correction cannot overwrite a peer's own L
+  toggle; fixing the joiner case without breaking that needs a `getLook` hook
+  and a deliberate decision about which wins.
+- Up to ~180 ms of a stroke can be lost if the socket dies after points reach
+  `sendInput` but before the relay echoes them. Inherent to lockstep without
+  rollback.
 - V2 finding 4: a `pendingResync` peer that inherits authority becomes the room
   reference, so a state just flagged as wrong can become truth. Correct per the
   server's own "an authority is its own reference" rule and unreachable at two
