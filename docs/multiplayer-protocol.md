@@ -46,7 +46,7 @@ all of them must be routed through the network layer while in a room:
 
 | type      | payload                          | Simulation call            |
 |-----------|----------------------------------|----------------------------|
-| `paint`   | `{x, y, r, mat}`                 | `paint(x, y, r, mat)`      |
+| `paint`   | `{pts: [x0,y0,x1,y1,...], r, mat}` | `paint(x, y, r, mat)` per point, in order |
 | `magnet`  | `{x, y, r, attract}`             | `magnet(x, y, r, attract)` |
 | `strike`  | `{x, y}`                         | `strike(x, y)`             |
 | `clear`   | `{}`                             | `clear()`                  |
@@ -56,6 +56,13 @@ all of them must be routed through the network layer while in a room:
 `setState` carries a **full serialized state** (see below), not the RLE scene
 format. It is what a preset load, a `.powder` file load, and a desync resync all
 send. Loading a scene inside a room is therefore a room-wide event.
+
+`paint` carries a flat list of points rather than a single one. A held pointer
+emits a stroke every rendered frame, and one message per frame per client is
+about 60 per second of pure overhead. The client coalesces a stroke's sampled
+points into one event and sends at most ~20 events per second; the points still
+apply one at a time, in order, so the stroke looks identical. The server does not
+parse event payloads, so this shape costs it nothing.
 
 Ordering: the server stamps a monotonically increasing sequence number on every
 input. Events sharing an `applyTick` are applied in ascending `seq` order on
@@ -95,6 +102,15 @@ join, expensive enough that it should never be sent on a timer.
 - The server compares hashes reported for the same tick. On mismatch it requests
   a fresh full state from the **oldest peer in the room** (the authority) and
   forwards it to the disagreeing client as a `setState` input.
+- A `setState` carries the tick the state was serialized at, which is in the past
+  by the time it arrives. The recovering client therefore loads the state, sets
+  its tick to the state's tick, and **replays from its own retained input log**
+  every input with `applyTick` greater than that tick, stepping forward to the
+  current tick. Every client keeps a few seconds of applied inputs for exactly
+  this. Because `INPUT_DELAY` broadcasts inputs ahead of when they apply, a
+  connected client always holds the inputs it needs; the server keeps no history.
+- A targeted `setState` still consumes a room `seq`, so healthy peers see a gap
+  in the sequence. `seq` is an ordering key, never a completeness check.
 - The server also keeps the most recent full state it has seen, refreshed by the
   authority every ~10 s, and serves it to late joiners.
 
