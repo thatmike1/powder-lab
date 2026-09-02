@@ -44,17 +44,30 @@ server and the client implement that document.
 ## Tasks
 | id | state | owned paths | job |
 |----|-------|-------------|-----|
-| T1 | REPORTED(DONE) → VERIFYING | src/sim/{Simulation.ts,rng.ts,state.ts,determinism.test.ts} | T1-determinism |
-| T2 | REPORTED(DONE) → VERIFYING | server/**, package.json, package-lock.json, vitest.config.ts | T2-relay |
-| T3 | PENDING | src/net/**, src/useSimulation.ts | — |
+| T1 | VERIFIED | src/sim/{Simulation.ts,rng.ts,state.ts,determinism.test.ts} | T1-determinism |
+| T2 | VERIFIED (notes → FIX1) | server/**, package.json, package-lock.json, vitest.config.ts | T2-relay |
+| T3 | DISPATCHED | src/net/**, src/useSimulation.ts | T3-netcode |
 | T4 | PENDING | src/App.tsx, src/styles.css, src/RoomBar.tsx | — |
+
+## Verifier findings routed
+- F1 build does not typecheck server → FIX1
+- F2 unanswered stateRequest strands a desynced peer → FIX1 (real defect)
+- F3 parseClientMessage measures UTF-16 units not bytes → FIX1
+- F4 no cursor rate limit (from T2's own report) → FIX1
+- F5 no heartbeat, ghost peers hold authority (from T2's own report) → FIX1
+- F6 single-player now replays identically every page load (side effect of
+  seeding) → T3: fresh random seed per session when not in a room
+- Snapshot cadence (conductor's own note) → left as spec'd; the verifier found
+  the joiner path is belt-and-braces already (cached blob + a fresh request)
 
 ## Attempts
 | task | # | seat | ticket rev | outcome | checks | evidence | when |
 |------|---|------|-----------|---------|--------|----------|------|
 | T1 | 1 | opus/high | rev1 | DONE | npm test 46/46, build clean, zero Math.random | commit 89a55b3, report T1-determinism.md | 2026-09-02 18:12 |
 | T2 | 1 | opus/med | rev1 | DONE | npm test 80/80, build clean, server typecheck ok, 2-client e2e | commit 9828c44, report T2-relay.md | 2026-09-02 18:16 |
-| W1 | 1 | orchestra-verifier (opus, inherit) | rev1 | dispatched | — | — | 2026-09-02 18:18 |
+| W1 | 1 | orchestra-verifier (opus, inherit) | rev1 | PASS_WITH_NOTES — all 20 criteria PASS | verifier re-ran npm test 80/80 + build; own 2-client e2e; own determinism harness | report V1-wave1.md; tree clean, HEAD unchanged after | 2026-09-02 18:26 |
+| T3 | 1 | opus/high | rev1 | dispatched | — | — | 2026-09-02 18:28 |
+| FIX1 | 1 | opus/med | rev1 | dispatched | — | — | 2026-09-02 18:28 |
 
 ## Decisions
 - 2026-09-02: lockstep over server-authoritative. Bandwidth forced it.
