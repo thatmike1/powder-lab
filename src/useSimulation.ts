@@ -1,5 +1,12 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { StrokeBatcher, encodeStateEnvelope, useNet } from './net'
+import {
+  applyPointEvent,
+  encodeStateEnvelope,
+  MagnetBatcher,
+  shouldBuildSim,
+  StrokeBatcher,
+  useNet,
+} from './net'
 import { Mat, PALETTE } from './sim/materials'
 import { Simulation } from './sim/Simulation'
 import { decodeRLE, readSceneFromHash, sceneToHash } from './sim/scene'
@@ -36,10 +43,6 @@ interface Config {
 // a fresh joiner can legitimately be a few hundred ticks behind the room clock
 // and has to sprint; still bounded so a hopeless client never freezes the tab.
 const MAX_CATCHUP = 32
-
-// Magnet is a force applied per event, and unlike a stroke its payload cannot
-// carry a point list, so it is throttled to the same ~20 Hz budget as paint.
-const MAGNET_MS = 50
 
 /**
  * a fresh seed per page load. the engine is seeded now (lockstep needs every
@@ -87,9 +90,33 @@ export function useSimulation(W: number, H: number, scale: number) {
   })
 
   // Batches a held stroke's per-frame samples into ~20 wire events a second.
-  // Local painting never goes through it — see paintAt.
+  // Local painting never goes through it — see paintAt. If the socket has gone
+  // away with points still buffered, they are applied locally instead of being
+  // dropped, so a mid-stroke disconnect leaves no seam.
   const strokes = useMemo(
-    () => new StrokeBatcher({ send: (event) => session.sendInput(event) }),
+    () =>
+      new StrokeBatcher({
+        send: (event) => session.sendInput(event),
+        fallback: (event) => {
+          const sim = simRef.current
+          if (sim) applyPointEvent(sim, event)
+        },
+      }),
+    [session],
+  )
+
+  // The magnet gets the same treatment for a different reason: it is a force
+  // applied once per sample, so throttling it without batching would make an
+  // in-room pull weaker than an offline one.
+  const magnets = useMemo(
+    () =>
+      new MagnetBatcher({
+        send: (event) => session.sendInput(event),
+        fallback: (event) => {
+          const sim = simRef.current
+          if (sim) applyPointEvent(sim, event)
+        },
+      }),
     [session],
   )
 
@@ -131,15 +158,21 @@ export function useSimulation(W: number, H: number, scale: number) {
     if (!canvas) return
     const ctx = canvas.getContext('2d', { alpha: false })
     if (!ctx) return
-    simRef.current = new Simulation(W, H, seedRef.current)
+    // the room owns the simulation while connected. this effect only ever runs
+    // once today, but if a dependency change or a remount re-ran it inside a
+    // room, building a fresh Simulation would silently drop this client out of
+    // lockstep — so the live one is kept and the hash hydration below skipped.
+    const fresh = shouldBuildSim(session.connected, simRef.current)
+    if (fresh) simRef.current = new Simulation(W, H, seedRef.current)
 
     // hydrate from a shared "#s=..." link, if present. shared scenes start
     // paused so the viewer sees the exact saved arrangement before pressing play.
-    const fromHash = readSceneFromHash()
-    if (fromHash) {
+    const booted = simRef.current
+    const fromHash = fresh && booted ? readSceneFromHash() : null
+    if (fromHash && booted) {
       try {
         const { cells } = decodeRLE(fromHash)
-        if (simRef.current.restore(cells)) {
+        if (booted.restore(cells)) {
           cfg.current.running = false
           setUi((u) => ({ ...u, running: false }))
         }
@@ -155,7 +188,6 @@ export function useSimulation(W: number, H: number, scale: number) {
       const gy = Math.floor(((clientY - rect.top) / rect.height) * H)
       return { gx, gy }
     }
-    let lastMagnet = Number.NEGATIVE_INFINITY
     const paintAt = (gx: number, gy: number, now: number) => {
       const c = cfg.current
       const sim = simRef.current
@@ -165,13 +197,10 @@ export function useSimulation(W: number, H: number, scale: number) {
       // Intercepted before the erase->EMPTY mapping below.
       if (c.material === Mat.MAGNET) {
         const attract = !pointer.current.erase
-        if (session.connected) {
-          if (now - lastMagnet < MAGNET_MS) return
-          lastMagnet = now
-          session.sendInput({ type: 'magnet', x: gx, y: gy, r: c.brush, attract })
-        } else {
-          sim.magnet(gx, gy, c.brush, attract)
-        }
+        // every sample reaches the grid either way: batched onto the wire in a
+        // room, applied directly outside one. same call count, same force.
+        if (session.connected) magnets.add(now, gx, gy, c.brush, attract)
+        else sim.magnet(gx, gy, c.brush, attract)
         return
       }
       const mat = pointer.current.erase ? Mat.EMPTY : c.material
@@ -226,7 +255,9 @@ export function useSimulation(W: number, H: number, scale: number) {
     }
     const onUp = (e: PointerEvent) => {
       pointer.current.down = false
-      strokes.flush(performance.now())
+      const upAt = performance.now()
+      strokes.flush(upAt)
+      magnets.flush(upAt)
       try {
         canvas.releasePointerCapture(e.pointerId)
       } catch {}
@@ -273,6 +304,7 @@ export function useSimulation(W: number, H: number, scale: number) {
       // "Faucet": holding the pointer still keeps emitting (great for fluids/fire).
       if (pointer.current.down) paintAt(pointer.current.x, pointer.current.y, now)
       strokes.poll(now)
+      magnets.poll(now)
       // joining a room swaps the simulation, so read it back after the step.
       const sim = simRef.current
       if (sim) {
@@ -297,9 +329,11 @@ export function useSimulation(W: number, H: number, scale: number) {
       canvas.removeEventListener('pointermove', onMove)
       window.removeEventListener('pointerup', onUp)
       canvas.removeEventListener('contextmenu', onCtx)
-      simRef.current = null
+      // dropping the sim here would take the room's with it; a live room keeps
+      // stepping through the session's own hooks.
+      if (!session.connected) simRef.current = null
     }
-  }, [W, H, scale, session, strokes])
+  }, [W, H, scale, session, strokes, magnets])
 
   // ---- setters: update both the live config ref AND the UI mirror --------
   const setMaterial = useCallback((m: number) => {

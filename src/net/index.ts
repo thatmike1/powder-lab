@@ -7,7 +7,10 @@ export {
   INPUT_DELAY,
   INPUT_LOG_TICKS,
   type InputEvent,
+  type MagnetEvent,
+  type MagnetSegment,
   type PaintEvent,
+  type PaintSegment,
   type PeerId,
   type PeerInfo,
   parseInputEvent,
@@ -17,6 +20,7 @@ export {
 } from './protocol'
 export { InputScheduler } from './scheduler'
 export {
+  applyPointEvent,
   type ConnectionStatus,
   NetSession,
   type NetSessionOptions,
@@ -30,6 +34,13 @@ export {
   decodeStateEnvelope,
   encodeStateEnvelope,
 } from './state-envelope'
-export { FLUSH_MS, StrokeBatcher } from './stroke-batcher'
+export { shouldBuildSim } from './sim-lifetime'
+export {
+  FLUSH_MS,
+  MagnetBatcher,
+  MAX_POINTS,
+  type PointBatcherOptions,
+  StrokeBatcher,
+} from './stroke-batcher'
 export { type Connect, connectWebSocket, defaultRelayUrl, type Transport } from './transport'
 export { type NetApi, useNet } from './useNet'

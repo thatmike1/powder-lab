@@ -4,6 +4,8 @@ import {
   type ClientMessage,
   CURSOR_INTERVAL_MS,
   type InputEvent,
+  type MagnetEvent,
+  type PaintEvent,
   type PeerId,
   type PeerInfo,
   parseServerMessage,
@@ -400,12 +402,8 @@ export class NetSession {
     const event = input.event
     switch (event.type) {
       case 'paint':
-        for (let i = 0; i + 1 < event.pts.length; i += 2) {
-          sim.paint(event.pts[i], event.pts[i + 1], event.r, event.mat)
-        }
-        break
       case 'magnet':
-        sim.magnet(event.x, event.y, event.r, event.attract)
+        applyPointEvent(sim, event)
         break
       case 'strike':
         sim.strike(event.x, event.y)
@@ -451,6 +449,39 @@ export class NetSession {
     this.scheduler.requeueAfter(envelope.roomTick)
     this.hooks?.onStateLoaded?.()
     return true
+  }
+}
+
+/**
+ * apply a batched paint or magnet event to a simulation: one call per point, in
+ * order, honouring the per-segment brush and material when the event carries
+ * segments. this is the ONLY place an event's points turn into grid calls, so
+ * the lockstep path and the local fallback cannot drift apart.
+ */
+export function applyPointEvent(sim: SimLike, event: PaintEvent | MagnetEvent): void {
+  const pts = event.pts
+  const call =
+    event.type === 'paint'
+      ? (x: number, y: number, r: number, k: number | boolean) => sim.paint(x, y, r, k as number)
+      : (x: number, y: number, r: number, k: number | boolean) => sim.magnet(x, y, r, k as boolean)
+  const segs: Array<{ n: number; r: number; k: number | boolean }> =
+    event.segs === undefined
+      ? [
+          {
+            n: pts.length / 2,
+            r: event.r,
+            k: event.type === 'paint' ? event.mat : event.attract,
+          },
+        ]
+      : event.segs.map((seg) => ({
+          n: seg.n,
+          r: seg.r,
+          k: 'mat' in seg ? seg.mat : seg.attract,
+        }))
+  let p = 0
+  for (const seg of segs) {
+    for (let n = 0; n < seg.n && p + 1 < pts.length; n++, p += 2)
+      call(pts[p], pts[p + 1], seg.r, seg.k)
   }
 }
 

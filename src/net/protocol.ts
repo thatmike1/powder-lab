@@ -23,9 +23,38 @@ export type PeerId = string
 
 export type PeerInfo = { id: PeerId; name: string }
 
-/** a stroke's sampled points, flattened as x0,y0,x1,y1,... and applied in order */
-export type PaintEvent = { type: 'paint'; pts: number[]; r: number; mat: number }
-export type MagnetEvent = { type: 'magnet'; x: number; y: number; r: number; attract: boolean }
+/**
+ * one run of consecutive points sharing a brush size and material. an event's
+ * `segs` (when present) partition `pts` in order, so a stroke that changed brush
+ * or material mid-drag still travels as ONE event instead of one per change.
+ */
+export type PaintSegment = { n: number; r: number; mat: number }
+
+/** the magnet's equivalent of {@link PaintSegment}; `attract` replaces `mat` */
+export type MagnetSegment = { n: number; r: number; attract: boolean }
+
+/**
+ * a stroke's sampled points, flattened as x0,y0,x1,y1,... and applied in order.
+ * `r`/`mat` describe the whole list unless `segs` is present, in which case they
+ * mirror the first segment and `segs` carries the real breakdown.
+ */
+export type PaintEvent = {
+  type: 'paint'
+  pts: number[]
+  r: number
+  mat: number
+  segs?: PaintSegment[]
+}
+
+/** the magnet's force samples, batched exactly like {@link PaintEvent} */
+export type MagnetEvent = {
+  type: 'magnet'
+  pts: number[]
+  r: number
+  attract: boolean
+  segs?: MagnetSegment[]
+}
+
 export type StrikeEvent = { type: 'strike'; x: number; y: number }
 export type ClearEvent = { type: 'clear' }
 /**
@@ -84,6 +113,38 @@ export type ServerMessage =
   | { type: 'stateRequest'; serverTime: number }
   | { type: 'error'; message: string; serverTime: number }
 
+/** a flat x0,y0,x1,y1,... point list, or null if it is not one */
+function parsePoints(raw: unknown): number[] | null {
+  if (!Array.isArray(raw) || raw.length === 0 || raw.length % 2 !== 0) return null
+  if (!raw.every(num)) return null
+  return raw as number[]
+}
+
+/**
+ * validate a segment list against the points it partitions. the counts must add
+ * up exactly, because a mismatch would leave a receiver painting a different
+ * stroke from the sender's.
+ */
+function parseSegments<T>(
+  raw: unknown,
+  points: number,
+  rest: (entry: Record<string, unknown>) => T | null,
+): Array<{ n: number; r: number } & T> | null {
+  if (!Array.isArray(raw) || raw.length === 0) return null
+  const out: Array<{ n: number; r: number } & T> = []
+  let total = 0
+  for (const entry of raw) {
+    if (!isRecord(entry)) return null
+    if (!num(entry.n) || !Number.isInteger(entry.n) || entry.n < 1) return null
+    if (!num(entry.r)) return null
+    const tail = rest(entry)
+    if (tail === null) return null
+    total += entry.n
+    out.push({ n: entry.n, r: entry.r, ...tail })
+  }
+  return total === points ? out : null
+}
+
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value)
 }
@@ -101,15 +162,27 @@ export function parseInputEvent(raw: unknown): InputEvent | null {
   if (!isRecord(raw)) return null
   switch (raw.type) {
     case 'paint': {
-      const pts = raw.pts
-      if (!Array.isArray(pts) || pts.length === 0 || pts.length % 2 !== 0) return null
-      if (!pts.every(num)) return null
+      const pts = parsePoints(raw.pts)
+      if (pts === null) return null
       if (!num(raw.r) || !num(raw.mat)) return null
-      return { type: 'paint', pts: pts as number[], r: raw.r, mat: raw.mat }
+      if (raw.segs === undefined) return { type: 'paint', pts, r: raw.r, mat: raw.mat }
+      const segs = parseSegments(raw.segs, pts.length / 2, (entry) =>
+        num(entry.mat) ? { mat: entry.mat } : null,
+      )
+      if (segs === null) return null
+      return { type: 'paint', pts, r: raw.r, mat: raw.mat, segs }
     }
-    case 'magnet':
-      if (!num(raw.x) || !num(raw.y) || !num(raw.r) || typeof raw.attract !== 'boolean') return null
-      return { type: 'magnet', x: raw.x, y: raw.y, r: raw.r, attract: raw.attract }
+    case 'magnet': {
+      const pts = parsePoints(raw.pts)
+      if (pts === null) return null
+      if (!num(raw.r) || typeof raw.attract !== 'boolean') return null
+      if (raw.segs === undefined) return { type: 'magnet', pts, r: raw.r, attract: raw.attract }
+      const segs = parseSegments(raw.segs, pts.length / 2, (entry) =>
+        typeof entry.attract === 'boolean' ? { attract: entry.attract } : null,
+      )
+      if (segs === null) return null
+      return { type: 'magnet', pts, r: raw.r, attract: raw.attract, segs }
+    }
     case 'strike':
       if (!num(raw.x) || !num(raw.y)) return null
       return { type: 'strike', x: raw.x, y: raw.y }

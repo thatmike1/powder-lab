@@ -1,11 +1,30 @@
 import { describe, expect, it } from 'vitest'
-import type { PaintEvent } from './protocol'
-import { FLUSH_MS, StrokeBatcher } from './stroke-batcher'
+import type { MagnetEvent, PaintEvent } from './protocol'
+import { FLUSH_MS, MagnetBatcher, StrokeBatcher } from './stroke-batcher'
 
 function collector() {
   const sent: PaintEvent[] = []
-  const batcher = new StrokeBatcher({ send: (event) => sent.push(event) })
+  const batcher = new StrokeBatcher({
+    send: (event) => {
+      sent.push(event)
+      return true
+    },
+  })
   return { sent, batcher }
+}
+
+/** flatten an event back into one (x, y, r, mat) per sampled point */
+function replay(events: PaintEvent[]): Array<[number, number, number, number]> {
+  const out: Array<[number, number, number, number]> = []
+  for (const event of events) {
+    const segs = event.segs ?? [{ n: event.pts.length / 2, r: event.r, mat: event.mat }]
+    let p = 0
+    for (const seg of segs) {
+      for (let n = 0; n < seg.n; n++, p += 2)
+        out.push([event.pts[p], event.pts[p + 1], seg.r, seg.mat])
+    }
+  }
+  return out
 }
 
 describe('StrokeBatcher', () => {
@@ -35,17 +54,40 @@ describe('StrokeBatcher', () => {
     expect(applied).toEqual(drawn)
   })
 
-  it('flushes before the brush or material changes mid-stroke', () => {
+  it('carries a mid-stroke brush or material change as a segment, not a new event', () => {
     const { sent, batcher } = collector()
-    batcher.add(0, 1, 1, 4, 7)
+    batcher.add(0, 1, 1, 4, 7) // first point leaves at once
     batcher.add(1, 2, 2, 4, 7)
     batcher.add(2, 3, 3, 4, 9)
-    expect(sent).toEqual([
-      { type: 'paint', pts: [1, 1], r: 4, mat: 7 },
-      { type: 'paint', pts: [2, 2], r: 4, mat: 7 },
-    ])
-    batcher.flush(3)
-    expect(sent[2]).toEqual({ type: 'paint', pts: [3, 3], r: 4, mat: 9 })
+    batcher.add(3, 4, 4, 6, 9)
+    expect(sent).toHaveLength(1)
+    batcher.flush(4)
+    expect(sent[1]).toEqual({
+      type: 'paint',
+      pts: [2, 2, 3, 3, 4, 4],
+      r: 4,
+      mat: 7,
+      segs: [
+        { n: 1, r: 4, mat: 7 },
+        { n: 1, r: 4, mat: 9 },
+        { n: 1, r: 6, mat: 9 },
+      ],
+    })
+  })
+
+  it('holds the event rate under mashed material keys, losing no point', () => {
+    const { sent, batcher } = collector()
+    const drawn: Array<[number, number, number, number]> = []
+    // the adversarial case: 60 Hz sampling for one second with the material
+    // changing on every single sample.
+    for (let frame = 0; frame < 60; frame++) {
+      const mat = frame % 5
+      drawn.push([frame, frame * 2, 4, mat])
+      batcher.add(frame * 16.67, frame, frame * 2, 4, mat)
+    }
+    batcher.flush(1000)
+    expect(sent.length).toBeLessThanOrEqual(21)
+    expect(replay(sent)).toEqual(drawn)
   })
 
   it('emits nothing when there is nothing pending', () => {
@@ -65,6 +107,29 @@ describe('StrokeBatcher', () => {
     expect(sent).toHaveLength(2)
   })
 
+  it('applies the buffered points locally when the socket drops mid-stroke', () => {
+    const sent: PaintEvent[] = []
+    const local: PaintEvent[] = []
+    let connected = true
+    const batcher = new StrokeBatcher({
+      send: (event) => {
+        if (!connected) return false
+        sent.push(event)
+        return true
+      },
+      fallback: (event) => local.push(event),
+    })
+    batcher.add(0, 1, 1, 4, 7)
+    batcher.add(1, 2, 2, 4, 7)
+    batcher.add(2, 3, 3, 4, 7)
+    connected = false
+    batcher.flush(1000)
+    expect(sent).toHaveLength(1)
+    expect(local).toEqual([{ type: 'paint', pts: [2, 2, 3, 3], r: 4, mat: 7 }])
+    // every sampled point reached the grid one way or the other
+    expect([...replay(sent), ...replay(local)]).toHaveLength(3)
+  })
+
   it('drops the stroke on reset', () => {
     const { sent, batcher } = collector()
     batcher.add(0, 1, 1, 4, 7)
@@ -72,5 +137,47 @@ describe('StrokeBatcher', () => {
     batcher.reset()
     batcher.flush(1000)
     expect(sent).toHaveLength(1)
+  })
+})
+
+describe('MagnetBatcher', () => {
+  it('batches a held pull into one event per flush interval, keeping every sample', () => {
+    const sent: MagnetEvent[] = []
+    const batcher = new MagnetBatcher({
+      send: (event) => {
+        sent.push(event)
+        return true
+      },
+    })
+    for (let frame = 0; frame < 60; frame++) batcher.add(frame * 16.67, 20, 30, 8, true)
+    batcher.flush(1000)
+    expect(sent.length).toBeLessThanOrEqual(21)
+    const points = sent.reduce((n, event) => n + event.pts.length / 2, 0)
+    expect(points).toBe(60)
+  })
+
+  it('segments a brush change instead of emitting a second event', () => {
+    const sent: MagnetEvent[] = []
+    const batcher = new MagnetBatcher({
+      send: (event) => {
+        sent.push(event)
+        return true
+      },
+    })
+    batcher.add(0, 1, 1, 8, true)
+    batcher.add(1, 2, 2, 8, true)
+    batcher.add(2, 3, 3, 12, true)
+    expect(sent).toHaveLength(1)
+    batcher.flush(3)
+    expect(sent[1]).toEqual({
+      type: 'magnet',
+      pts: [2, 2, 3, 3],
+      r: 8,
+      attract: true,
+      segs: [
+        { n: 1, r: 8, attract: true },
+        { n: 1, r: 12, attract: true },
+      ],
+    })
   })
 })
