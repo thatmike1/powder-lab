@@ -47,6 +47,40 @@ npm run build    # typecheck + production build into dist/
 npm run preview  # serve the production build
 ```
 
+### Multiplayer
+
+```bash
+npm run server   # the relay, ws://localhost:8787
+npm run dev      # in another terminal
+```
+
+Open the app, start a room from the pill in the title bar, and share the
+`?room=CODE` link. The relay holds rooms in memory only; there is no database
+and no account.
+
+## Multiplayer
+
+Rooms run **deterministic lockstep**: every client simulates the same grid and
+only paint strokes cross the network, stamped with the tick at which everyone
+applies them. Streaming grid deltas instead would be megabytes per second at
+200x150 cells and 75 ticks per second; strokes are tens of bytes.
+
+The price is that the simulation must be bit-identical everywhere, so all
+randomness comes from one seeded generator whose state travels inside a
+serialized snapshot, and every mutation — paint, magnet, lightning, clear, scene
+load, pause — goes over the wire rather than being applied locally first. Room
+speed is pinned to 1x for the same reason. Clients checksum their grid every 300
+ticks; a mismatch pulls a fresh snapshot from the oldest peer and replays the
+inputs since.
+
+`docs/multiplayer-protocol.md` is the full specification. `server/` is a plain
+`ws` relay that stamps, orders and forwards opaque blobs; it never parses a
+simulation event.
+
+Known limits in this version: no automatic rejoin after a dropped socket, and a
+client joining after someone picked a gallery scene gets the room's grid but
+keeps its own lighting toggles.
+
 ## How it works
 
 The interesting architectural choice: **React owns the chrome, an imperative core owns the frame.**
