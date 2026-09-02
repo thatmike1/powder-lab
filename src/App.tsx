@@ -1,4 +1,5 @@
 import { type CSSProperties, type ReactNode, useRef, useState } from 'react'
+import { CursorOverlay } from './CursorOverlay'
 import { CHIP_STYLES } from './chip-styles'
 import { Gallery } from './gallery'
 import {
@@ -12,6 +13,7 @@ import {
   ShareIcon,
   StepIcon,
 } from './pixel-icons'
+import { RoomBar } from './RoomBar'
 import { CATEGORIES, PALETTE } from './sim/materials'
 import { useSimulation } from './useSimulation'
 
@@ -146,6 +148,7 @@ export default function App() {
   const {
     canvasRef,
     ui,
+    net,
     setMaterial,
     setBrush,
     setSpeed,
@@ -175,6 +178,7 @@ export default function App() {
         <span className="wordmark">
           POWDER&nbsp;<b>LAB</b>
         </span>
+        <RoomBar net={net} />
         <button
           type="button"
           className="gallery-open"
@@ -264,6 +268,7 @@ export default function App() {
 
             <div className="canvas-frame">
               <canvas ref={canvasRef} width={W * SCALE} height={H * SCALE} className="sim" />
+              <CursorOverlay net={net} W={W} H={H} />
             </div>
 
             <p className="hint">
@@ -284,8 +289,8 @@ export default function App() {
                 type="button"
                 className="btn icon-only"
                 onClick={stepOnce}
-                disabled={ui.running}
-                title="Step one frame"
+                disabled={ui.running || ui.speedLocked}
+                title={ui.speedLocked ? 'Stepping is off in a room' : 'Step one frame'}
                 aria-label="step"
               >
                 <StepIcon size={18} />
@@ -322,8 +327,10 @@ export default function App() {
               displayValue={`${ui.speed}×`}
               onChange={setSpeed}
               speed
+              disabled={ui.speedLocked}
               scaleLo="1×"
               scaleHi="6×"
+              note={ui.speedLocked ? '— pinned to 1× in a room' : undefined}
             />
 
             <div className="divider" />

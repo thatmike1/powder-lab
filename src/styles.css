@@ -34,7 +34,12 @@
   /* speed meter uses acid green so it reads apart from the brush meter */
   --acid: rgb(120, 214, 70);
 
+  /* a dropped connection is the one place the chrome shouts */
+  --warn: rgb(232, 84, 66);
+
   /* stacking order — the gallery drawer lifts over the window */
+  --z-cursor: 10;
+  --z-pop: 30;
   --z-scrim: 40;
   --z-drawer: 50;
 
@@ -125,7 +130,9 @@ body {
   place-items: center;
   color: var(--muted);
   box-shadow: inset 1px 1px 0 var(--inset-hi);
-  transition: background 0.1s ease-out, color 0.1s ease-out;
+  transition:
+    background 0.1s ease-out,
+    color 0.1s ease-out;
 }
 .winctl button:hover {
   background: var(--accent-dk);
@@ -155,7 +162,9 @@ body {
   text-transform: uppercase;
   letter-spacing: 1px;
   box-shadow: inset 1px 1px 0 var(--inset-hi);
-  transition: background 0.1s ease-out, color 0.1s ease-out;
+  transition:
+    background 0.1s ease-out,
+    color 0.1s ease-out;
 }
 .gallery-open svg {
   display: block;
@@ -293,10 +302,14 @@ kbd {
   inset: 0;
   pointer-events: none;
   background:
-    repeating-linear-gradient(90deg, var(--accent-lt) 0 3px, transparent 3px 6px) top / 100% 1px no-repeat,
-    repeating-linear-gradient(90deg, var(--accent-lt) 0 3px, transparent 3px 6px) bottom / 100% 1px no-repeat,
-    repeating-linear-gradient(0deg, var(--accent-lt) 0 3px, transparent 3px 6px) left / 1px 100% no-repeat,
-    repeating-linear-gradient(0deg, var(--accent-lt) 0 3px, transparent 3px 6px) right / 1px 100% no-repeat;
+    repeating-linear-gradient(90deg, var(--accent-lt) 0 3px, transparent 3px 6px) top / 100% 1px
+    no-repeat,
+    repeating-linear-gradient(90deg, var(--accent-lt) 0 3px, transparent 3px 6px) bottom / 100% 1px
+    no-repeat,
+    repeating-linear-gradient(0deg, var(--accent-lt) 0 3px, transparent 3px 6px) left / 1px 100%
+    no-repeat,
+    repeating-linear-gradient(0deg, var(--accent-lt) 0 3px, transparent 3px 6px) right / 1px 100%
+    no-repeat;
   animation: march 0.5s steps(6) infinite;
 }
 @keyframes march {
@@ -364,6 +377,7 @@ kbd {
 }
 
 .canvas-frame {
+  position: relative; /* the peer-cursor layer is pinned to the canvas box */
   width: 100%;
   max-width: 880px;
   border: var(--px) solid var(--hairline);
@@ -415,7 +429,11 @@ kbd {
   width: 2px;
   align-self: stretch;
   margin: 0 var(--px);
-  background-image: repeating-linear-gradient(to bottom, var(--hairline) 0 4px, transparent 4px 8px);
+  background-image: repeating-linear-gradient(
+    to bottom,
+    var(--hairline) 0 4px,
+    transparent 4px 8px
+  );
 }
 
 /* ---- pixel buttons (hard bevel highlights) ---- */
@@ -543,7 +561,11 @@ kbd {
 }
 .bars.speed i.on {
   background: rgb(58, 110, 30);
-  background-image: repeating-linear-gradient(to bottom, var(--acid) 0 2px, rgb(58, 110, 30) 2px 4px);
+  background-image: repeating-linear-gradient(
+    to bottom,
+    var(--acid) 0 2px,
+    rgb(58, 110, 30) 2px 4px
+  );
   box-shadow: inset 1px 1px 0 rgb(190, 255, 140);
 }
 .bars-input {
@@ -673,13 +695,15 @@ kbd {
   background: oklch(0.08 0.01 60 / 0.62);
   /* a faint pixel grid over the dimmed window, no soft blur */
   background-image: repeating-linear-gradient(
-      45deg,
-      oklch(0.06 0.01 60 / 0.5) 0 2px,
-      transparent 2px 6px
-    );
+    45deg,
+    oklch(0.06 0.01 60 / 0.5) 0 2px,
+    transparent 2px 6px
+  );
   opacity: 0;
   visibility: hidden;
-  transition: opacity 0.28s ease-out, visibility 0s linear 0.28s;
+  transition:
+    opacity 0.28s ease-out,
+    visibility 0s linear 0.28s;
   will-change: opacity;
 }
 .drawer-scrim.open {
@@ -739,7 +763,9 @@ kbd {
   color: var(--muted);
   cursor: pointer;
   box-shadow: inset 1px 1px 0 var(--inset-hi);
-  transition: background 0.1s ease-out, color 0.1s ease-out;
+  transition:
+    background 0.1s ease-out,
+    color 0.1s ease-out;
 }
 .drawer-close:hover {
   background: var(--accent-dk);
@@ -823,7 +849,9 @@ kbd {
   cursor: pointer;
   text-align: left;
   box-shadow: inset 1px 1px 0 var(--inset-hi);
-  transition: background 0.1s ease-out, transform 0.1s ease-out;
+  transition:
+    background 0.1s ease-out,
+    transform 0.1s ease-out;
 }
 .scene-card:hover {
   background: var(--raised-2);
@@ -885,14 +913,313 @@ kbd {
   pointer-events: none;
   background:
     repeating-linear-gradient(90deg, var(--accent-lt) 0 3px, transparent 3px 6px) top / 100% 1px
-      no-repeat,
+    no-repeat,
     repeating-linear-gradient(90deg, var(--accent-lt) 0 3px, transparent 3px 6px) bottom / 100% 1px
-      no-repeat,
+    no-repeat,
     repeating-linear-gradient(0deg, var(--accent-lt) 0 3px, transparent 3px 6px) left / 1px 100%
-      no-repeat,
+    no-repeat,
     repeating-linear-gradient(0deg, var(--accent-lt) 0 3px, transparent 3px 6px) right / 1px 100%
-      no-repeat;
+    no-repeat;
   animation: march 0.5s steps(6) infinite;
+}
+
+/* ============================================================
+   MULTIPLAYER — the room pill, its panel, and peer cursors
+   ============================================================ */
+
+.room-wrap {
+  position: relative;
+}
+
+/* the room entry sits beside the gallery pill and wears the same shell; only
+   the LED changes, so connection state reads without opening anything. */
+.room-open {
+  display: inline-flex;
+  align-items: center;
+  gap: calc(var(--px) * 1.5);
+  height: calc(var(--px) * 5);
+  padding: 0 calc(var(--px) * 2.5);
+  background: var(--raised-2);
+  border: 1px solid var(--hairline);
+  color: var(--muted);
+  cursor: pointer;
+  font-family: "Silkscreen", monospace;
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  box-shadow: inset 1px 1px 0 var(--inset-hi);
+  transition:
+    background 0.1s ease-out,
+    color 0.1s ease-out;
+}
+.room-open .room-icon {
+  display: block;
+  color: var(--muted);
+}
+.room-open:hover {
+  background: var(--accent-dk);
+  color: var(--text);
+}
+.room-open:hover .room-icon {
+  color: var(--accent-lt);
+}
+.room-open:active {
+  box-shadow: inset 1px 1px 0 var(--inset-lo);
+  transform: translate(1px, 1px);
+}
+.room-open.connected {
+  color: var(--text);
+}
+.room-open.connected .room-icon {
+  color: var(--acid);
+}
+.room-open.error {
+  color: var(--warn);
+  border-color: var(--warn);
+}
+
+/* the state lamp: one 4px block, no blur, colour is the whole message. */
+.room-led {
+  width: var(--px);
+  height: var(--px);
+  background: var(--dim);
+  box-shadow: 0 0 0 1px var(--inset-lo);
+  flex: none;
+}
+.connecting .room-led {
+  background: var(--accent);
+  animation: room-blink 0.6s steps(1) infinite;
+}
+.connected .room-led {
+  background: var(--acid);
+}
+.error .room-led {
+  background: var(--warn);
+}
+@keyframes room-blink {
+  50% {
+    background: var(--accent-dk);
+  }
+}
+
+/* the panel drops straight out of the pill — same bevels as the window. */
+.room-pop {
+  position: absolute;
+  top: calc(100% + var(--px) * 2);
+  left: 0;
+  z-index: var(--z-pop);
+  width: calc(var(--px) * 62);
+  display: flex;
+  flex-direction: column;
+  gap: calc(var(--px) * 2);
+  padding: calc(var(--px) * 3);
+  background: var(--panel);
+  border: var(--px) solid var(--hairline);
+  box-shadow: calc(var(--px) * 2) calc(var(--px) * 2) 0 var(--shadow);
+}
+
+.room-status {
+  display: flex;
+  align-items: center;
+  gap: calc(var(--px) * 2);
+  font-family: "Silkscreen", monospace;
+  font-size: 10px;
+  line-height: 1.5;
+  color: var(--muted);
+}
+.room-status.connected {
+  color: var(--text);
+}
+.room-status.error {
+  color: var(--warn);
+}
+
+.room-error {
+  font-family: "JetBrains Mono", monospace;
+  font-size: 11px;
+  color: var(--warn);
+  background: var(--ground-d);
+  border: 1px solid var(--warn);
+  padding: calc(var(--px) * 1.5) calc(var(--px) * 2);
+  word-break: break-word;
+}
+
+.room-code {
+  align-self: flex-start;
+  padding: calc(var(--px) * 1.5) calc(var(--px) * 2);
+  background: var(--ground-d);
+  border: 1px solid var(--hairline);
+  box-shadow: inset 2px 2px 0 var(--inset-lo);
+  font-family: "Press Start 2P", monospace;
+  font-size: 14px;
+  color: var(--accent);
+  text-shadow: 2px 2px 0 var(--accent-dk);
+  letter-spacing: 2px;
+  user-select: all;
+}
+
+.room-btn {
+  height: calc(var(--px) * 7);
+  padding: 0 calc(var(--px) * 2.5);
+  background: var(--raised-2);
+  border: 1px solid var(--hairline);
+  color: var(--text);
+  cursor: pointer;
+  font-family: "Silkscreen", monospace;
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  box-shadow:
+    inset 2px 2px 0 var(--inset-hi),
+    inset -2px -2px 0 var(--inset-lo),
+    2px 2px 0 var(--shadow);
+}
+.room-btn:hover:not(:disabled) {
+  background: var(--raised-3);
+}
+.room-btn:active:not(:disabled) {
+  box-shadow:
+    inset -2px -2px 0 var(--inset-hi),
+    inset 2px 2px 0 var(--inset-lo);
+  transform: translate(1px, 1px);
+}
+.room-btn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+.room-btn.wide {
+  width: 100%;
+}
+.room-btn.primary {
+  background: var(--accent);
+  color: oklch(0.18 0.02 50);
+  border-color: var(--accent-lt);
+  box-shadow:
+    inset 2px 2px 0 var(--accent-lt),
+    inset -2px -2px 0 var(--accent-dk),
+    2px 2px 0 var(--shadow);
+}
+.room-btn.primary:hover:not(:disabled) {
+  background: var(--accent-lt);
+}
+
+.room-copy {
+  display: flex;
+  gap: calc(var(--px) * 2);
+}
+.room-copy .room-btn {
+  flex: 1;
+  white-space: nowrap;
+}
+
+.room-input {
+  height: calc(var(--px) * 7);
+  padding: 0 calc(var(--px) * 2);
+  background: var(--ground-d);
+  border: 1px solid var(--hairline);
+  color: var(--text);
+  font-family: "JetBrains Mono", monospace;
+  font-size: 12px;
+  box-shadow: inset 2px 2px 0 var(--inset-lo);
+  min-width: 0;
+}
+.room-input::placeholder {
+  color: var(--dim);
+}
+.room-input:focus {
+  outline: 2px solid var(--accent);
+  outline-offset: 0;
+}
+.room-input.code {
+  flex: 1;
+  letter-spacing: 3px;
+  text-transform: uppercase;
+}
+
+.room-join {
+  display: flex;
+  gap: calc(var(--px) * 2);
+}
+
+.peer-list {
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: var(--px);
+  max-height: calc(var(--px) * 40);
+  overflow-y: auto;
+  border-top: 1px dashed var(--hairline);
+  border-bottom: 1px dashed var(--hairline);
+  padding: calc(var(--px) * 1.5) 0;
+}
+.peer-list li {
+  display: flex;
+  align-items: center;
+  gap: calc(var(--px) * 2);
+  font-family: "JetBrains Mono", monospace;
+  font-size: 12px;
+  color: var(--text);
+}
+.peer-dot {
+  width: calc(var(--px) * 2);
+  height: calc(var(--px) * 2);
+  box-shadow: 0 0 0 1px var(--inset-lo);
+  flex: none;
+}
+.peer-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.peer-you {
+  margin-left: auto;
+  font-family: "Silkscreen", monospace;
+  font-size: 9px;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  color: var(--ground-d);
+  background: var(--accent);
+  padding: 1px calc(var(--px) * 1.5);
+}
+
+/* ---- peer cursors: a DOM layer over the canvas, never painted into it ---- */
+.cursor-layer {
+  position: absolute;
+  inset: 0;
+  z-index: var(--z-cursor);
+  pointer-events: none;
+  overflow: hidden;
+  line-height: 1;
+}
+.peer-cursor {
+  position: absolute;
+  display: flex;
+  align-items: flex-start;
+  gap: 2px;
+  transform: translate(-2px, -2px);
+  will-change: left, top, opacity;
+}
+.pc-dot {
+  width: var(--px);
+  height: var(--px);
+  background: currentColor;
+  box-shadow:
+    0 0 0 1px oklch(0.1 0.01 60),
+    var(--px) var(--px) 0 currentColor;
+  flex: none;
+}
+.pc-name {
+  font-family: "Silkscreen", monospace;
+  font-size: 9px;
+  letter-spacing: 1px;
+  color: currentColor;
+  background: oklch(0.1 0.01 60 / 0.85);
+  padding: 1px 3px;
+  margin-top: calc(var(--px) * 2);
+  max-width: calc(var(--px) * 24);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 /* ============================================================
@@ -918,6 +1245,12 @@ kbd {
   .mat {
     padding: calc(var(--px) * 4);
   }
+  /* the window clips its own overflow, so the room panel hangs left of the
+     pill rather than off the right edge once the titlebar gets tight. */
+  .room-pop {
+    left: auto;
+    right: 0;
+  }
 }
 
 /* honor reduced-motion for decorative chrome motion (the simulation itself is
@@ -927,6 +1260,7 @@ kbd {
   .btn,
   .winctl button,
   .gallery-open,
+  .room-open,
   .switch::after,
   .drawer,
   .drawer-scrim,
@@ -935,7 +1269,9 @@ kbd {
   }
   .tile.active::after,
   .scene-card:hover::after,
-  .scene-card:focus-visible::after {
+  .scene-card:focus-visible::after,
+  .room-open.connecting .room-led,
+  .room-status.connecting .room-led {
     animation: none;
   }
 }
