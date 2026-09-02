@@ -1,5 +1,7 @@
 import {
   CHECKSUM_TICK_HISTORY,
+  CURSOR_BURST,
+  CURSOR_RATE_PER_SEC,
   errorTo,
   INPUT_DELAY,
   type InputEvent,
@@ -12,7 +14,14 @@ import {
   TICK_MS,
 } from './protocol.ts'
 
-type PeerRecord = { id: PeerId; name: string; joinOrder: number }
+type PeerRecord = {
+  id: PeerId
+  name: string
+  joinOrder: number
+  /** cursor rate-limit bucket, refilled from the wall clock passed into `cursor` */
+  cursorTokens: number
+  cursorTokensAt: number
+}
 
 /**
  * one room's pure logic: tick clock, peer roster, input stamping and ordering,
@@ -84,6 +93,23 @@ export class Room {
     return [...this.peers.keys()]
   }
 
+  /**
+   * peers still owed a corrective state, dropping any that left or that have
+   * since become the authority (an authority is its own reference).
+   */
+  private resyncTargets(): PeerId[] {
+    const auth = this.authority()
+    const out: PeerId[] = []
+    for (const peer of this.pendingResync) {
+      if (!this.peers.has(peer) || peer === auth) {
+        this.pendingResync.delete(peer)
+        continue
+      }
+      out.push(peer)
+    }
+    return out
+  }
+
   /** ask the authority for a fresh full state, unless a request is already in flight */
   private requestState(now: number): Outbound[] {
     if (this.stateRequestedAt !== null && now - this.stateRequestedAt < STATE_REQUEST_TIMEOUT_MS) {
@@ -92,13 +118,20 @@ export class Room {
     const auth = this.authority()
     if (auth === null) return []
     this.stateRequestedAt = now
+    this.lastStateRefresh = now
     return [{ to: [auth], msg: { type: 'stateRequest', serverTime: now } }]
   }
 
   /** admit a peer, replying with `joined` and telling the room about the new roster */
   join(id: PeerId, name: string, now: number): Outbound[] {
     const hadPeers = this.peers.size > 0
-    this.peers.set(id, { id, name, joinOrder: this.joinCounter++ })
+    this.peers.set(id, {
+      id,
+      name,
+      joinOrder: this.joinCounter++,
+      cursorTokens: CURSOR_BURST,
+      cursorTokensAt: now,
+    })
     this.emptySince = null
     const out: Outbound[] = [
       {
@@ -127,17 +160,26 @@ export class Room {
 
   /** remove a peer and announce the new roster to whoever is left */
   leave(id: PeerId, now: number): Outbound[] {
+    const wasAuthority = this.authority() === id
     if (!this.peers.delete(id)) return []
     this.pendingResync.delete(id)
     for (const byPeer of this.checksums.values()) byPeer.delete(id)
     if (this.peers.size === 0) {
       this.emptySince = now
       this.stateRequestedAt = null
+      this.pendingResync.clear()
       return []
     }
-    return [
+    const out: Outbound[] = [
       { to: this.everyone(), msg: { type: 'peers', peers: this.peerList(), serverTime: now } },
     ]
+    // the authority that owed us a state is gone, so its in-flight request died
+    // with it: re-ask the peer that just inherited authority right away.
+    if (wasAuthority) {
+      this.stateRequestedAt = null
+      if (this.resyncTargets().length > 0) out.push(...this.requestState(now))
+    }
+    return out
   }
 
   /** stamp an input with its apply tick and room-monotonic seq, then broadcast it to everyone */
@@ -160,7 +202,10 @@ export class Room {
 
   /** relay a cosmetic cursor to the other peers, outside the tick system entirely */
   cursor(id: PeerId, x: number, y: number, now: number): Outbound[] {
-    if (!this.peers.has(id)) return []
+    const peer = this.peers.get(id)
+    if (peer === undefined) return []
+    // cosmetic data: a peer over its rate is dropped silently rather than errored
+    if (!spendCursorToken(peer, now)) return []
     const others = this.everyone().filter((p) => p !== id)
     if (others.length === 0) return []
     return [{ to: others, msg: { type: 'cursor', from: id, x, y, serverTime: now } }]
@@ -219,7 +264,7 @@ export class Room {
     this.latestState = state
     this.stateRequestedAt = null
     this.lastStateRefresh = now
-    const targets = [...this.pendingResync].filter((peer) => this.peers.has(peer))
+    const targets = this.resyncTargets()
     this.pendingResync.clear()
     if (targets.length === 0) return []
     return [
@@ -240,11 +285,25 @@ export class Room {
   /** periodic upkeep: refresh the cached state from the authority every ~10s */
   maintain(now: number): Outbound[] {
     if (this.peers.size === 0) return []
-    if (now - this.lastStateRefresh < STATE_REFRESH_MS) return []
-    const out = this.requestState(now)
-    if (out.length > 0) this.lastStateRefresh = now
-    return out
+    // a request the authority never answered is retried once it times out,
+    // otherwise a peer waiting on a resync would wait forever.
+    const waiting = this.resyncTargets().length > 0
+    if (!waiting && now - this.lastStateRefresh < STATE_REFRESH_MS) return []
+    return this.requestState(now)
   }
+}
+
+/** refill a peer's cursor bucket for the elapsed time and spend one token if it can */
+function spendCursorToken(peer: PeerRecord, now: number): boolean {
+  const elapsed = Math.max(0, now - peer.cursorTokensAt)
+  peer.cursorTokens = Math.min(
+    CURSOR_BURST,
+    peer.cursorTokens + (elapsed * CURSOR_RATE_PER_SEC) / 1000,
+  )
+  peer.cursorTokensAt = now
+  if (peer.cursorTokens < 1) return false
+  peer.cursorTokens -= 1
+  return true
 }
 
 /** most frequently reported hash, ties broken by first insertion order */

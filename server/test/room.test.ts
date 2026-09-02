@@ -1,5 +1,14 @@
 import { describe, expect, it } from 'vitest'
-import { INPUT_DELAY, type Outbound, type ServerMessage, TICK_MS } from '../src/protocol.ts'
+import {
+  CURSOR_BURST,
+  CURSOR_RATE_PER_SEC,
+  INPUT_DELAY,
+  type Outbound,
+  type ServerMessage,
+  STATE_REFRESH_MS,
+  STATE_REQUEST_TIMEOUT_MS,
+  TICK_MS,
+} from '../src/protocol.ts'
 import { Room } from '../src/room.ts'
 
 const T0 = 1_000_000
@@ -189,5 +198,85 @@ describe('Room state authority', () => {
     expect(r.maintain(T0 + 1000)).toEqual([])
     const out = r.maintain(T0 + 11_000)
     expect(out).toEqual([{ to: ['a'], msg: { type: 'stateRequest', serverTime: T0 + 11_000 } }])
+  })
+})
+
+describe('Room resync recovery', () => {
+  it('retries a state request the authority never answered', () => {
+    const r = room()
+    r.join('a', 'ada', T0)
+    // the join queues b for a resync and issues the first request
+    expect(messages(r.join('b', 'bo', T0), 'stateRequest')[0].to).toEqual(['a'])
+    // still in flight, so nothing new goes out
+    expect(r.maintain(T0 + STATE_REQUEST_TIMEOUT_MS - 1)).toEqual([])
+    const retry = r.maintain(T0 + STATE_REQUEST_TIMEOUT_MS)
+    expect(retry).toEqual([
+      { to: ['a'], msg: { type: 'stateRequest', serverTime: T0 + STATE_REQUEST_TIMEOUT_MS } },
+    ])
+  })
+
+  it('re-asks the peer that inherits authority when the old one leaves', () => {
+    const r = room()
+    r.join('a', 'ada', T0)
+    r.join('b', 'bo', T0 + 1)
+    r.join('c', 'cy', T0 + 2)
+    // c is waiting on a state from a, which then disconnects
+    const out = r.leave('a', T0 + 3)
+    expect(messages(out, 'stateRequest')[0]).toEqual({
+      to: ['b'],
+      msg: { type: 'stateRequest', serverTime: T0 + 3 },
+    })
+    // and b, now the authority, can serve c
+    expect(r.state('b', 'BLOB', T0 + 4)[0].to).toEqual(['c'])
+  })
+
+  it('drains pendingResync once the state is delivered', () => {
+    const r = room()
+    r.join('a', 'ada', T0)
+    r.join('b', 'bo', T0)
+    r.state('a', 'BLOB', T0 + 1)
+    // nothing is owed any more, so the retry path stays quiet until the refresh timer
+    expect(r.maintain(T0 + STATE_REQUEST_TIMEOUT_MS + 1)).toEqual([])
+    expect(r.maintain(T0 + STATE_REFRESH_MS + 2)).toHaveLength(1)
+  })
+
+  it('resyncs a mismatch reported while an earlier request is still in flight', () => {
+    const r = room()
+    r.join('a', 'ada', T0)
+    r.join('b', 'bo', T0)
+    r.join('c', 'cy', T0)
+    // the joins left a request in flight; a genuine mismatch arrives inside its window
+    r.checksum('a', 300, 111, T0 + 1)
+    r.checksum('c', 300, 111, T0 + 1)
+    expect(r.checksum('b', 300, 222, T0 + 1)).toEqual([])
+    // the request is retried on timeout and b is still owed the state
+    expect(messages(r.maintain(T0 + STATE_REQUEST_TIMEOUT_MS), 'stateRequest')[0].to).toEqual(['a'])
+    const delivered = r.state('a', 'BLOB', T0 + STATE_REQUEST_TIMEOUT_MS + 1)
+    expect(delivered[0].to.sort()).toEqual(['b', 'c'])
+  })
+
+  it('drops a peer from the resync queue once it becomes the authority', () => {
+    const r = room()
+    r.join('a', 'ada', T0)
+    r.join('b', 'bo', T0)
+    r.leave('a', T0 + 1)
+    // b inherited authority, so it is nobody's resync target any more
+    expect(r.maintain(T0 + STATE_REQUEST_TIMEOUT_MS)).toEqual([])
+  })
+})
+
+describe('Room cursor rate limit', () => {
+  it('drops cursor frames past the burst allowance and refills over time', () => {
+    const r = room()
+    r.join('a', 'ada', T0)
+    r.join('b', 'bo', T0)
+    for (let i = 0; i < CURSOR_BURST; i++) {
+      expect(r.cursor('a', i, i, T0)).toHaveLength(1)
+    }
+    expect(r.cursor('a', 9, 9, T0)).toEqual([])
+    // one token is worth 1000 / CURSOR_RATE_PER_SEC ms
+    expect(r.cursor('a', 9, 9, T0 + 1000 / CURSOR_RATE_PER_SEC)).toHaveLength(1)
+    // a peer's flood never starves another peer
+    expect(r.cursor('b', 1, 1, T0)).toHaveLength(1)
   })
 })

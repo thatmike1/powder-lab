@@ -7,6 +7,9 @@ import { RoomRegistry } from './registry.ts'
 /** how often rooms are swept for state refreshes and expiry */
 const MAINTENANCE_MS = 1_000
 
+/** how often peers are pinged; a peer that misses one whole interval is evicted */
+const HEARTBEAT_MS = 30_000
+
 export type RelayServer = {
   wss: WebSocketServer
   registry: RoomRegistry
@@ -19,10 +22,15 @@ export type RelayServer = {
  * start the relay. the socket layer is a thin shell: it assigns peer ids, parses
  * frames, hands them to the pure registry and delivers whatever comes back.
  */
-export function startRelay(port = Number(process.env.PORT ?? 8787)): RelayServer {
+export function startRelay(
+  port = Number(process.env.PORT ?? 8787),
+  heartbeatMs = HEARTBEAT_MS,
+): RelayServer {
   const wss = new WebSocketServer({ port, maxPayload: MAX_MESSAGE_BYTES })
   const registry = new RoomRegistry()
   const sockets = new Map<PeerId, WebSocket>()
+  /** peers that have answered a ping since the last heartbeat sweep */
+  const alive = new Set<PeerId>()
 
   const deliver = (outbound: Outbound[]): void => {
     for (const { to, msg } of outbound) {
@@ -37,6 +45,10 @@ export function startRelay(port = Number(process.env.PORT ?? 8787)): RelayServer
   wss.on('connection', (socket) => {
     const peerId = randomUUID().slice(0, 8)
     sockets.set(peerId, socket)
+    alive.add(peerId)
+    socket.on('pong', () => {
+      alive.add(peerId)
+    })
 
     socket.on('message', (data: RawData, isBinary: boolean) => {
       const now = Date.now()
@@ -56,6 +68,7 @@ export function startRelay(port = Number(process.env.PORT ?? 8787)): RelayServer
 
     socket.on('close', () => {
       sockets.delete(peerId)
+      alive.delete(peerId)
       deliver(registry.leave(peerId, Date.now()))
     })
 
@@ -65,6 +78,23 @@ export function startRelay(port = Number(process.env.PORT ?? 8787)): RelayServer
   })
 
   const timer = setInterval(() => deliver(registry.maintain(Date.now())), MAINTENANCE_MS)
+
+  // a half-open socket never fires 'close', so its peer would sit in the roster
+  // forever, possibly holding room authority. ping every peer and evict the ones
+  // that did not answer the previous ping.
+  const heartbeat = setInterval(() => {
+    const now = Date.now()
+    for (const [id, socket] of sockets) {
+      if (!alive.has(id)) {
+        sockets.delete(id)
+        deliver(registry.leave(id, now))
+        socket.terminate()
+        continue
+      }
+      alive.delete(id)
+      socket.ping()
+    }
+  }, heartbeatMs)
 
   return {
     wss,
@@ -76,6 +106,7 @@ export function startRelay(port = Number(process.env.PORT ?? 8787)): RelayServer
     close: () =>
       new Promise<void>((resolve) => {
         clearInterval(timer)
+        clearInterval(heartbeat)
         for (const socket of sockets.values()) socket.terminate()
         wss.close(() => resolve())
       }),

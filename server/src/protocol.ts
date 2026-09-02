@@ -23,6 +23,12 @@ export const STATE_REFRESH_MS = 10_000
 /** how long an unanswered state request blocks further requests */
 export const STATE_REQUEST_TIMEOUT_MS = 5_000
 
+/** sustained cursor frames per second a peer may relay before excess is dropped */
+export const CURSOR_RATE_PER_SEC = 20
+
+/** cursor frames a peer may burst above the sustained rate */
+export const CURSOR_BURST = 5
+
 /** how many distinct ticks of checksum reports are retained per room */
 export const CHECKSUM_TICK_HISTORY = 32
 
@@ -72,6 +78,17 @@ export function errorTo(id: PeerId, message: string, now: number): Outbound {
   return { to: [id], msg: { type: 'error', message, serverTime: now } }
 }
 
+/**
+ * whether a frame is over the byte cap. utf-8 spends one to three bytes per
+ * utf-16 code unit, so the two length bounds settle every ordinary frame and
+ * only the ambiguous middle is actually encoded and measured.
+ */
+export function exceedsMessageByteCap(raw: string): boolean {
+  if (raw.length > MAX_MESSAGE_BYTES) return true
+  if (raw.length * 3 <= MAX_MESSAGE_BYTES) return false
+  return new TextEncoder().encode(raw).length > MAX_MESSAGE_BYTES
+}
+
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value)
 }
@@ -82,7 +99,7 @@ function isRecord(value: unknown): value is Record<string, unknown> {
  * simulation meaning.
  */
 export function parseClientMessage(raw: string): { msg: ClientMessage } | { reason: string } {
-  if (raw.length > MAX_MESSAGE_BYTES) return { reason: 'message too large' }
+  if (exceedsMessageByteCap(raw)) return { reason: 'message too large' }
   let parsed: unknown
   try {
     parsed = JSON.parse(raw)

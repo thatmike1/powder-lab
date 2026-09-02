@@ -46,6 +46,11 @@ class FakeClient {
     return new Promise((resolve) => this.waiters.push({ type, resolve }))
   }
 
+  /** stop reading from the socket, so the peer never answers a server ping */
+  pause(): void {
+    this.socket.pause()
+  }
+
   close(): void {
     this.socket.close()
   }
@@ -150,5 +155,40 @@ describe('relay end to end', () => {
     expect((await b.next('error')).message).toBe('only the room authority may supply state')
     a.close()
     b.close()
+  })
+})
+
+describe('relay heartbeat', () => {
+  it('evicts a peer that stops answering pings', async () => {
+    // a fast heartbeat so the sweep is a few dozen ms rather than half a minute
+    const relay = startRelay(0, 40)
+    await new Promise<void>((resolve) => relay.wss.once('listening', () => resolve()))
+    try {
+      const a = new FakeClient(relay.port())
+      await a.open()
+      a.send({ type: 'join', name: 'ada' })
+      const joinedA = await a.next('joined')
+
+      const b = new FakeClient(relay.port())
+      await b.open()
+      b.send({ type: 'join', room: joinedA.room, name: 'bo' })
+      await b.next('joined')
+      const room = relay.registry.room(joinedA.room as string)
+      expect(room?.size).toBe(2)
+      // consume the rosters from a's own join and from b's
+      await a.next('peers')
+      await a.next('peers')
+
+      // b goes half-open: its socket stays up but it never pongs again
+      b.pause()
+      const roster = (await a.next('peers')).peers as { id: string }[]
+      expect(roster).toEqual([{ id: joinedA.you, name: 'ada' }])
+      expect(room?.size).toBe(1)
+
+      a.close()
+      b.close()
+    } finally {
+      await relay.close()
+    }
   })
 })
