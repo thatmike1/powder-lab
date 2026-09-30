@@ -21,7 +21,7 @@ This is a fun personal project — **commit liberally without asking first.** Wh
 
 **Always commit beads changes silently.** When `bd` issue creation/updates dirty `.beads/issues.jsonl`, fold it into the related commit (or a `chore:` commit) automatically — don't ask, and don't report "N beads files modified".
 
-**Never push** unless explicitly asked for that exact moment — pushing stays user-owned (it auto-deploys `main`).
+**Pushing:** push finished, verified work without asking, except to `main`: a push to `main` auto-deploys to GitHub Pages, so ask Mike before pushing it.
 
 ## Architecture
 
@@ -110,7 +110,7 @@ bd close <id>         # Complete work
 - Use `bd` for ALL task tracking — do NOT use TodoWrite, TaskCreate, or markdown TODO lists
 - For command reference, use the beads skill (not `bd prime`)
 
-**Architecture in one line:** issues live in a local Dolt DB; `.beads/issues.jsonl` is a git-tracked export kept in sync by the project git hooks. Commit `issues.jsonl` with related work; **do not push** unless explicitly asked.
+**Architecture in one line:** issues live in a local Dolt DB; `.beads/issues.jsonl` is a git-tracked export kept in sync by the project git hooks. Commit `issues.jsonl` with related work; pushing follows the rule under Committing (ask before pushing `main`).
 <!-- END BEADS INTEGRATION -->
 
 ## Issue conventions (bd)
