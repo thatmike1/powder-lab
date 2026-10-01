@@ -21,3 +21,28 @@ for (let a = 0; a < MAT_COUNT; a++) {
     FACE[a * MAT_COUNT + b] = ca + cb === 0 ? 0 : Math.trunc((2 * ca * cb) / (ca + cb))
   }
 }
+
+// Render-only one-degree lookup: no per-pixel arrays or interpolation. The
+// authoritative field retains all Q4 precision; this changes no physics.
+export const HEAT_COLORS = new Uint32Array(MAX_TEMP - MIN_TEMP + 1)
+const stops = [-160, 0, 20, 100, 400, 1100, 2400]
+const colors = [
+  [45, 85, 220],
+  [90, 180, 220],
+  [24, 26, 32],
+  [180, 95, 35],
+  [240, 50, 24],
+  [255, 180, 45],
+  [255, 245, 220],
+]
+let stop = 0
+for (let temperature = MIN_TEMP; temperature <= MAX_TEMP; temperature++) {
+  while (stop < stops.length - 2 && temperature > stops[stop + 1]) stop++
+  const t = (temperature - stops[stop]) / (stops[stop + 1] - stops[stop])
+  const a = colors[stop],
+    b = colors[stop + 1]
+  const r = Math.round(a[0] + (b[0] - a[0]) * t)
+  const g = Math.round(a[1] + (b[1] - a[1]) * t)
+  const blue = Math.round(a[2] + (b[2] - a[2]) * t)
+  HEAT_COLORS[temperature - MIN_TEMP] = (0xff000000 | (blue << 16) | (g << 8) | r) >>> 0
+}

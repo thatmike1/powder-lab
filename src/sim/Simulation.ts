@@ -16,7 +16,7 @@ import {
 import { DEFAULT_SEED, Rng } from './rng'
 import { encodeRLE } from './scene'
 import { decodeState, encodeState } from './state'
-import { AMBIENT, FACE, TEMP_SCALE, quantizeTemp } from './thermal'
+import { AMBIENT, FACE, TEMP_SCALE, quantizeTemp, HEAT_COLORS, MIN_TEMP, MAX_TEMP } from './thermal'
 
 const CS = 16 // chunk size (cells per side)
 
@@ -163,14 +163,13 @@ export class Simulation {
 
   /** Wake the chunk of (x,y) and any neighbor chunk a 3x3 neighbor lands in. */
   private wake(x: number, y: number): void {
-    const cx0 = Math.max(0, (x - 1) >> 4)
-    const cx1 = Math.min(this.chunkW - 1, (x + 1) >> 4)
-    const cy0 = Math.max(0, (y - 1) >> 4)
-    const cy1 = Math.min(this.chunkH - 1, (y + 1) >> 4)
-    for (let cy = cy0; cy <= cy1; cy++) {
-      const row = cy * this.chunkW
-      for (let cx = cx0; cx <= cx1; cx++) this.activeNext[row + cx] = 1
-    }
+    const cx = x >> 4, cy = y >> 4, row = cy * this.chunkW
+    const dx = (x & 15) === 0 && cx > 0 ? -1 : (x & 15) === 15 && cx < this.chunkW - 1 ? 1 : 0
+    const dy = (y & 15) === 0 && cy > 0 ? -1 : (y & 15) === 15 && cy < this.chunkH - 1 ? 1 : 0
+    this.activeNext[row + cx] = 1
+    if (dx) this.activeNext[row + cx + dx] = 1
+    if (dy) this.activeNext[row + dy * this.chunkW + cx] = 1
+    if (dx && dy) this.activeNext[row + dy * this.chunkW + cx + dx] = 1
   }
 
   private assignSpawnLife(i: number, mat: number): void {
@@ -1161,14 +1160,7 @@ export class Simulation {
 
   /** Piecewise temperature colors keep ambient dark and reactions readable. */
   private heatColor(h: number): number {
-    const stops = [-160, 0, 20, 100, 400, 1100, 2400]
-    const colors = [[45, 85, 220], [90, 180, 220], [24, 26, 32],
-      [180, 95, 35], [240, 50, 24], [255, 180, 45], [255, 245, 220]]
-    let k = 0
-    while (k < stops.length - 2 && h > stops[k + 1]) k++
-    const t = Math.max(0, Math.min(1, (h - stops[k]) / (stops[k + 1] - stops[k])))
-    const a = colors[k], b = colors[k + 1]
-    return rgba(Math.round(a[0] + (b[0] - a[0]) * t), Math.round(a[1] + (b[1] - a[1]) * t), Math.round(a[2] + (b[2] - a[2]) * t))
+    return HEAT_COLORS[Math.max(MIN_TEMP, Math.min(MAX_TEMP, Math.round(h))) - MIN_TEMP]
   }
 
   private baseColor(m: number, lf: number, ex: number): number {
@@ -1291,6 +1283,8 @@ export class Simulation {
     light: boolean,
     darkness: number,
   ): void {
+    // Temperature colors must remain legible regardless of scene lighting.
+    if (this.showTemp) { glow = false; light = false }
     this.writeImage()
     this.offCtx.putImageData(this.imageData, 0, 0)
     ctx.imageSmoothingEnabled = false

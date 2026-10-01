@@ -12,6 +12,7 @@
     "typecheck": "tsc --noEmit && tsc -p server/tsconfig.json --noEmit",
     "test": "vitest run",
     "test:watch": "vitest",
+    "bench:sim": "tsx scripts/bench-sim.ts",
     "lint": "biome lint .",
     "lint:fix": "biome lint --write .",
     "format": "biome format .",

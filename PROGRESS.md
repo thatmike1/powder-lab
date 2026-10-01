@@ -52,7 +52,7 @@ significant; report distributions and the same harness again at unit 7.
    batched lockstep paint path; tools never become cell materials.
 6. **Complete:** thousands-of-ticks paired simulations, ongoing byte equality,
    live mid-reaction snapshot continuation, chunk borders, network replay.
-7. **Pending:** repeat identical benchmark, optimize active passes and conduction;
+7. **Complete:** repeat identical benchmark, optimize active passes and conduction;
    record timing and practical budget limits, no timing-based simulation branches.
 8. **Pending:** tune reactions, showcase the existing oil/lava/gunpowder plus
    useful thermal materials and gallery contraptions; browser visual check.
@@ -76,7 +76,7 @@ remote exists (origin is configured).
 
 ## Next
 
-Implement unit 7. Unit 1: Q4 temperatures and integer face flux; conduct before
+Implement unit 8. Unit 1: Q4 temperatures and integer face flux; conduct before
 movement, advect heat with particles, precomputed harmonic conductivity, cheaper
 chunk waking. Minimum one-quantum ambient cooling prevents an integer tail from
 keeping chunks awake forever. Retuned fire emission/wood ignition for the changed
@@ -134,3 +134,27 @@ Extra engine check: Node and cached Chromium ran identical 2,000-tick thermal
 scripts and produced the same 31,141 bytes, SHA-256
 `7752aa103d69b07a69c70f332e1d095790bf6ed1f4538ff29671c82b304cfa25`.
 The temporary browser/server have been stopped.
+
+Unit 7: repeatable `npm run bench:sim -- --stress` uses the same baseline sizes,
+seed, warmup and samples, plus continuously heated sealed steam and replenished
+burning fuel. Fast corner-aware chunk waking, precomputed conductivity and
+integer passes preserve before/after benchmark checksums. Heat-view rendering
+uses a 10 kB lookup instead of per-pixel allocations and bypasses bloom/darkness.
+Added a corner wake regression; 165 tests/type-check/build pass.
+
+Final unit-7 CPU measurements on this shared server (ms per 200×150 step):
+
+| Scene | Mean | Median | p95 | p99 |
+| --- | ---: | ---: | ---: | ---: |
+| Idle | 0.020 | 0.008 | 0.018 | 0.049 |
+| Full lava | 8.007 | 7.109 | 11.025 | 24.244 |
+| Mixed, forced active | 5.497 | 5.067 | 7.470 | 13.744 |
+| First contraption | 0.677 | 0.544 | 1.693 | 2.803 |
+| Sealed hot steam, full active | 7.236 | 6.759 | 8.990 | 15.807 |
+| Burning fuel, full active | 6.127 | 5.554 | 8.066 | 12.126 |
+
+Mean/median/p95 fit the 13.33 ms tick budget, with normal gallery/idle scenes
+leaving ample render headroom. Occasional p99 host scheduling pauses exceed a
+tick; these are CPU step timings, not a claim about end-to-end rendering FPS.
+An earlier isolated full-lava run measured 7.211 mean/7.144 median/7.490 p95,
+illustrating the server's load variance.

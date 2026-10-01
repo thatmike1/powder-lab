@@ -25,6 +25,17 @@ describe('fixed-point thermal transport', () => {
     expect(s.heat[3 * 32 + 8]).toBeLessThan(100)
   })
 
+  it('wakes all four chunks at a corner, without waking unrelated chunks', () => {
+    const s = new Simulation(33, 33, 8)
+    s.step(200)
+    s.paint(15, 15, 0, Mat.HEAT)
+    const next = (s as unknown as { activeNext: Uint8Array }).activeNext
+    expect(Array.from(next)).toEqual([1, 1, 0, 1, 1, 0, 0, 0, 0])
+    s.step()
+    expect(s.heat[15 * 33 + 16]).toBeGreaterThan(20)
+    expect(s.heat[16 * 33 + 15]).toBeGreaterThan(20)
+  })
+
   it('wakes a sleeping neighbor when heat reaches a chunk edge', () => {
     const s = new Simulation(48, 16, 8)
     s.step(200)
