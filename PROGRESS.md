@@ -1,5 +1,45 @@
 # Thermodynamics checkpoint — feat/thermo
 
+## Final summary
+
+**All units 0–8 are complete, verified and pushed to `feat/thermo`.** Main was
+not pushed. Every unit has its own checkpoint commit; all thermodynamics beads
+are closed and the Dolt data is synced to `refs/dolt/data`.
+
+The simulation now transports fixed-point temperature with particles, conducts
+heat, absorbs/releases latent energy during ice/water/steam/glass transitions,
+burns finite fuel with heat/smoke, and builds confined gas pressure that ruptures
+weak enclosures. Heat/Cool brushes use ordered multiplayer inputs; snapshot v4
+and exact checksums carry every persistent field, including both chunk queues.
+Heat view includes a legend and hover probe. Heater/Chiller materials and three
+thermal gallery scenes make the new behavior easy to explore. A delayed-packet
+clock-filter correction keeps larger snapshots from pulling clients behind.
+
+Verification: **170 tests in 23 files**, one worker; frontend/server type-check
+and production build pass. Paired sims match after every one of 4096 ticks;
+live snapshots resume identically; Node and Chromium agree over 2000 ticks;
+two actual browser peers match paused loads/thermal strokes and live checksums.
+Desktop/mobile checks and a full `.powder` download/import round trip pass.
+Temporary browser files, scripts and task caches are deleted; temporary browsers,
+Vite and the isolated relay are stopped.
+
+Final 200×150 CPU step cost: **5.86 ms mean for full lava** (baseline 19.13 ms),
+**7.15 ms mean / 10.06 ms p95 for sealed hot steam**, and 0.52 ms mean for the
+hourglass. All benchmark mean/median/p95 values fit the 13.33 ms tick budget;
+shared-server scheduling can still cause outliers. These exclude rendering.
+
+To try it: run `npm run dev`, open **Gallery**, choose **Hot & Cold**,
+**Pressure Cooker** or **Glassworks**, then **Play**. Use **H** for heat view,
+**B/K** for heat/cool, **J/U** for heater/chiller. In the cooker, erase the lid
+before Play to compare a vented vessel. For multiplayer, also run `npm run server`
+and share a room link between peers using this build. Full `.powder` saves retain
+reactions; compact URL scenes restore material layouts. The live site remains
+on main until this branch is deliberately deployed.
+
+No requested work remains. A future iteration could add material heat capacities
+and pressure-driven gas motion. The current accelerated sandbox units and
+powered reservoirs are documented in [docs/thermodynamics.md](docs/thermodynamics.md).
+
 ## Assessment (before implementation)
 
 Read README.md, PRODUCT.md, DESIGN.md, docs/multiplayer-protocol.md, src/sim,
@@ -76,8 +116,9 @@ remote exists (origin is configured).
 
 ## Next
 
-All nine units are implemented and verified. Finish unit-8 checkpoint/push and
-the final summary; no further physics implementation is required.
+All units are committed and pushed. No required implementation remains; the
+final summary above is the handoff. The following entries preserve verification
+at each checkpoint.
 
 Unit 1: Q4 temperatures and integer face flux; conduct before
 movement, advect heat with particles, precomputed harmonic conductivity, cheaper
