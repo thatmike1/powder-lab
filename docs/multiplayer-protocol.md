@@ -1,4 +1,4 @@
-# Multiplayer protocol (v1)
+# Multiplayer protocol (lockstep v1, simulation state v4)
 
 Authored by the orchestration conductor before implementation. Both the relay
 server and the client netcode implement THIS document. Where an implementation
@@ -94,31 +94,29 @@ The existing `snapshot()` / RLE format carries `cells` only. That is enough for
 a shareable URL and **not** enough for a late joiner, because two clients whose
 `life`, `extra`, `heat` and PRNG cursor differ will diverge within a few ticks.
 
-Full state must carry, in one byte stream with its own magic and version:
+Full state uses little-endian magic `PS`, version **4**, and carries:
 
-- `W`, `H`
-- `cells` (Uint8Array), `life` (Uint8Array), `extra` (Uint8Array)
-- `heat` (Float32Array)
-- `stamp` (Int32Array)
-- `active` and `activeNext` (Uint8Array, the chunk-activity queues)
-- the PRNG state word
-- the current `tick`
+- W/H, simulation tick, PRNG state word and chunk count in a 19-byte header
+- `cells`, `life`, `extra` (Uint8Array)
+- `active` and `activeNext` (Uint8Array, both exact chunk queues)
+- `stamp` (Int32Array), `heat` (Float32Array, exact Q4 degrees)
+- `phase` (Int16Array, signed Q4 latent energy)
+- `fuel` (Uint16Array), `burnFrom` (Uint8Array), `pressure` (Uint16Array)
 
-The chunk-activity queues are load-bearing and easy to miss. Cells inside a
-sleeping chunk draw no random numbers, so a joiner that woke every chunk on load
-would run its PRNG ahead of its peers and desync. `heatNext` is correctly absent:
-`diffuse()` opens with a full `heatNext.set(heat)`, so it carries nothing across
-a tick.
+Both chunk queues are load-bearing: waking sleeping chunks changes random draw
+order and diverges. Scratch heat/pressure buffers are rebuilt before use and
+carry nothing across ticks. A 200×150 state is 540,279 bytes (~720 kB base64),
+below the relay's 4 MB frame limit. Old/incompatible state versions are rejected;
+the client disconnects with an instruction to reload all peers and start a room.
 
-Compression beyond a straight byte dump is optional for v1. A 200x150 grid
-encodes to roughly 270 kB uncompressed, ~360 kB base64 — cheap enough to send on
-join, expensive enough that it should never be sent on a timer.
 
 ## Checksums and desync
 
 - Every 300 ticks (~4 s) a client sends `{type: "checksum", tick, hash}`.
-- `hash` is FNV-1a 32-bit over `cells`, `life`, `extra`, and `heat` quantized as
-  `Math.round(heat * 4) | 0`, in that order.
+- `hash` is FNV-1a 32-bit over `cells`, `life`, `extra`, exact integer Q4
+  heat, phase, fuel, burning origin, pressure, stamp, both chunk queues,
+  W/H/tick and PRNG word, in that order. Multi-byte fields mix little-endian
+  bytes. Even a one-quantum or sleeping-chunk difference is detectable.
 - The server compares hashes reported for the same tick. On mismatch it requests
   a fresh full state from the **oldest peer in the room** (the authority) and
   forwards it to the disagreeing client as a `setState` input.

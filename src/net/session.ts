@@ -213,7 +213,7 @@ export class NetSession {
   }
 
   private handleClose(reason: string): void {
-    if (this.statusValue === 'disconnected') return
+    if (this.statusValue === 'disconnected' || (this.statusValue === 'error' && this.transport === null)) return
     this.transport = null
     this.resetRoom()
     // a drop mid-session is an error the user should see; a drop while dialling
@@ -314,7 +314,10 @@ export class NetSession {
         // every peer runs the same seeded engine; a late joiner overwrites it
         // immediately with the room's cached state, whose PRNG word wins.
         this.hooks?.reseed(msg.seed)
-        if (msg.state !== null) this.adoptState(msg.state)
+        if (msg.state !== null && !this.adoptState(msg.state)) {
+          this.rejectState()
+          break
+        }
         this.setStatus('connected')
         break
       }
@@ -361,7 +364,7 @@ export class NetSession {
     if (!this.connected || !this.clock.ready) return 0
     const target = this.clock.serverTick(this.now())
     let steps = 0
-    while (this.tick < target && steps < maxSteps) {
+    while (this.connected && this.tick < target && steps < maxSteps) {
       const sim = this.hooks?.getSim() ?? null
       if (sim === null) return steps
       if (this.hooks?.isRunning() ?? true) sim.step(1)
@@ -401,6 +404,7 @@ export class NetSession {
         return
       }
       this.applyEvent(input)
+      if (!this.connected) return
       this.scheduler.remember(input)
     }
   }
@@ -432,10 +436,19 @@ export class NetSession {
         if (envelope !== null && sim.loadState(envelope.state)) {
           if (envelope.look !== null) this.hooks?.setLook?.(envelope.look)
           this.hooks?.onStateLoaded?.()
-        }
+        } else this.rejectState()
         break
       }
     }
+  }
+
+  private rejectState(): void {
+    const transport = this.transport
+    this.transport = null
+    transport?.close()
+    this.resetRoom()
+    this.errorValue = 'Room state is incompatible or damaged. Reload all peers to the same build and start a new room.'
+    this.setStatus('error')
   }
 
   /**
@@ -444,7 +457,7 @@ export class NetSession {
    * the normal drain replays them while `advance` steps forward to the present.
    */
   private resync(state: string): void {
-    if (!this.adoptState(state)) return
+    if (!this.adoptState(state)) { this.rejectState(); return }
     // the server hands a joiner its first state through the same path, so a
     // correction in the first seconds of a room is the handshake, not a desync.
     if (this.now() - this.joinedAt > JOIN_GRACE_MS) this.desyncsValue++

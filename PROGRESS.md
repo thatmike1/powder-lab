@@ -50,7 +50,7 @@ significant; report distributions and the same harness again at unit 7.
    material strength and ruptures; pressure in snapshots and checksums.
 5. **Complete:** readable heat view/legend and heat/cool brushes using the existing
    batched lockstep paint path; tools never become cell materials.
-6. **Pending:** thousands-of-ticks paired simulations, ongoing byte equality,
+6. **Complete:** thousands-of-ticks paired simulations, ongoing byte equality,
    live mid-reaction snapshot continuation, chunk borders, network replay.
 7. **Pending:** repeat identical benchmark, optimize active passes and conduction;
    record timing and practical budget limits, no timing-based simulation branches.
@@ -76,7 +76,7 @@ remote exists (origin is configured).
 
 ## Next
 
-Implement unit 6. Unit 1: Q4 temperatures and integer face flux; conduct before
+Implement unit 7. Unit 1: Q4 temperatures and integer face flux; conduct before
 movement, advect heat with particles, precomputed harmonic conductivity, cheaper
 chunk waking. Minimum one-quantum ambient cooling prevents an integer tail from
 keeping chunks awake forever. Retuned fire emission/wood ignition for the changed
@@ -120,3 +120,17 @@ type-check/build pass with lockfile dependencies restored. Cached Chromium
 verified desktop/mobile heat controls and a 180-degree brush readout without
 page errors; fixed narrow layout clipping and bounded palette height. The
 browser and temporary dev server are stopped.
+
+Unit 6: a 4,096-tick paired test compares complete serialized bytes after EVERY
+tick, with scripted new physics, thermal brush segments, lightning/magnet,
+repeated reloads, asymmetric heat-view rendering and poisoned scratch buffers.
+A second live snapshot continues 1,197 ticks; state decoding rejects malformed
+materials, Q4 temperatures, chunk shapes and older versions atomically. Exact
+checksums now cover all persistent state. Network regressions cover no local
+thermal echo, paused strokes, pressure late join, replay and incompatible-state
+disconnect. 164 tests pass in 22 files; type-check/build pass.
+
+Extra engine check: Node and cached Chromium ran identical 2,000-tick thermal
+scripts and produced the same 31,141 bytes, SHA-256
+`7752aa103d69b07a69c70f332e1d095790bf6ed1f4538ff29671c82b304cfa25`.
+The temporary browser/server have been stopped.

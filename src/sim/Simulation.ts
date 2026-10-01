@@ -534,13 +534,8 @@ export class Simulation {
     return true
   }
 
-  /**
-   * FNV-1a 32-bit over `cells`, `life`, `extra` and then `heat` quantized to
-   * `Math.round(heat * 4) | 0` (four little-endian bytes each), in that order.
-   * peers exchange this every few hundred ticks; a mismatch means a desync.
-   * heat is quantized because it is the one float field, and bit-identical
-   * floats are a stronger claim than the protocol needs.
-   */
+  /** Exact FNV-1a over all authoritative state, including Q4 temperature,
+   * PRNG and chunk queues. A sub-degree difference must not hide a desync. */
   checksum(): number {
     let h = 0x811c9dc5
     const mix = (b: number): void => {
@@ -551,7 +546,7 @@ export class Simulation {
     for (let i = 0; i < n; i++) mix(this.life[i])
     for (let i = 0; i < n; i++) mix(this.extra[i])
     for (let i = 0; i < n; i++) {
-      const q = Math.round(this.heat[i] * 4) | 0
+      const q = Math.round(this.heat[i] * TEMP_SCALE) | 0
       mix(q)
       mix(q >> 8)
       mix(q >> 16)
@@ -561,6 +556,12 @@ export class Simulation {
     for (const f of this.fuel) { mix(f); mix(f >> 8) }
     for (const m of this.burnFrom) mix(m)
     for (const p of this.pressure) { mix(p); mix(p >> 8) }
+    for (const t of this.stamp) { mix(t); mix(t >> 8); mix(t >> 16); mix(t >> 24) }
+    for (const a of this.active) mix(a)
+    for (const a of this.activeNext) mix(a)
+    for (const word of [this.W, this.H, this.frame, this.rng.getState()]) {
+      mix(word); mix(word >> 8); mix(word >> 16); mix(word >> 24)
+    }
     return h >>> 0
   }
 

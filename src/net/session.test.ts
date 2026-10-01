@@ -17,6 +17,7 @@ const SEED = 0x1234_5678
  * client half against it.
  */
 class FakeRelay {
+  joinedState: string | null = null
   now = 100_000
   readonly t0 = 100_000
   private seq = 0
@@ -59,7 +60,7 @@ class FakeRelay {
           seed: SEED,
           tick: this.tick(),
           serverTime: this.now,
-          state: null,
+          state: this.joinedState,
           peers: [...this.peers.keys()].map((id) => ({ id, name: id })),
         })
         break
@@ -294,6 +295,55 @@ describe('NetSession', () => {
     expect(b.session.desyncs).toBe(1)
     expect(a.session.roomTick).toBe(b.session.roomTick)
     expect(b.sim().checksum()).toBe(a.sim().checksum())
+  })
+
+  it('thermal strokes wait for broadcast, work while paused, and replay on resync', () => {
+    const relay = new FakeRelay(), a = makePeer(relay), b = makePeer(relay), peers = [a, b]
+    a.session.sendInput({ type: 'running', on: false })
+    run(relay, peers, 200)
+    const before = a.sim().serializeState()
+    a.session.sendInput({ type: 'paint', pts: [16, 15, 16, 15], r: 3, mat: Mat.HEAT })
+    expect(a.sim().serializeState()).toEqual(before)
+    run(relay, peers, 200)
+    expect(a.sim().heat[15 * W + 16]).toBe(340)
+    expect(a.sim().serializeState()).toEqual(b.sim().serializeState())
+    const stale = a.session.serializeEnvelope()!
+    b.session.sendInput({ type: 'paint', pts: [16, 15], r: 2, mat: Mat.COOL })
+    run(relay, peers, 200)
+    b.sim().paint(4, 4, 1, Mat.WOOD)
+    relay.pushSetState('p1', stale, 'p0')
+    run(relay, peers, 300)
+    expect(b.sim().serializeState()).toEqual(a.sim().serializeState())
+  })
+
+  it('a late joiner adopts live thermal pressure and resumes exactly', () => {
+    const relay = new FakeRelay(), a = makePeer(relay)
+    for (let y = 10; y < 20; y++) for (let x = 10; x < 20; x++) {
+      a.sim().paint(x, y, 0, x === 10 || x === 19 || y === 10 || y === 19 ? Mat.WALL : Mat.STEAM)
+    }
+    run(relay, [a], 40)
+    expect(a.sim().pressure.some(p => p > 0)).toBe(true)
+    relay.joinedState = a.session.serializeEnvelope()
+    const b = makePeer(relay)
+    expect(b.sim().serializeState()).toEqual(a.sim().serializeState())
+    a.session.sendInput({ type: 'paint', pts: [15, 16], r: 3, mat: Mat.HEAT })
+    run(relay, [a, b], 1500)
+    expect(b.sim().serializeState()).toEqual(a.sim().serializeState())
+  })
+
+  it('disconnects with an actionable error instead of running an incompatible snapshot', () => {
+    const relay = new FakeRelay(), a = makePeer(relay)
+    const bytes = a.sim().serializeState(); bytes[2] = 1
+    const bad = encodeStateEnvelope(a.session.roomTick, true, bytes)
+    relay.pushSetState('p0', bad, 'p0')
+    run(relay, [a], 500)
+    expect(a.session.status).toBe('error')
+    expect(a.session.connected).toBe(false)
+    expect(a.session.error).toContain('same build')
+    relay.joinedState = bad
+    const b = makePeer(relay)
+    expect(b.session.status).toBe('error')
+    expect(b.session.error).toContain('same build')
   })
 
   it('goes back to single player when the socket drops', () => {

@@ -60,6 +60,8 @@ All stochastic rules use `src/sim/rng.ts`. The renderer consumes no randomness.
 Full snapshots use little-endian state version 4: dimensions/tick/PRNG word;
 `cells`, `life`, `extra`, both chunk queues, `stamp`, `heat`, `phase`, `fuel`,
 `burnFrom`, and `pressure`. Scratch buffers are fully copied/rebuilt before use.
-Old state versions must be rejected rather than loaded with missing physics.
+Old state versions are rejected with an actionable disconnect instead of
+loading missing physics. Checksums cover every persistent field, including the
+exact Q4 temperature, PRNG and chunk queues.
 The legacy RLE scene format contains materials only and reseeds their spawn
 state; it is separate from multiplayer snapshots.

@@ -1,3 +1,6 @@
+import { Mat, MAT_COUNT } from './materials'
+import { MIN_TEMP, MAX_TEMP, TEMP_SCALE } from './thermal'
+
 // full simulation state (de)serialization: the pure bytes layer behind
 // `Simulation.serializeState` / `loadState`. Deliberately separate from
 // `scene.ts` — the RLE scene format carries `cells` only, which is fine for a
@@ -19,7 +22,8 @@
 
 const MAGIC0 = 0x50 // 'P'
 const MAGIC1 = 0x53 // 'S'
-const VERSION = 4
+export const STATE_VERSION = 4
+const VERSION = STATE_VERSION
 const HEADER = 19
 
 /** thrown when bytes aren't a recognizable full simulation state. */
@@ -57,6 +61,17 @@ function byteLength(n: number, c: number): number {
   return HEADER + 3 * n + 2 * c + 4 * n + 4 * n + 2 * n + 3 * n + 2 * n
 }
 
+function validateShape(W: number, H: number, c: number): void {
+  if (!Number.isInteger(W) || !Number.isInteger(H) || W < 1 || H < 1 || W > 65535 || H > 65535 || W * H > 1_000_000) {
+    throw new StateFormatError('invalid state dimensions')
+  }
+  if (c !== Math.ceil(W / 16) * Math.ceil(H / 16)) throw new StateFormatError('invalid chunk count')
+}
+
+function validMaterial(m: number): boolean {
+  return m < MAT_COUNT && m !== Mat.MAGNET && m !== Mat.HEAT && m !== Mat.COOL
+}
+
 /**
  * encode a full simulation state as a straight byte dump behind a small header.
  * every multi-byte field is written explicitly little-endian so two clients on
@@ -66,6 +81,7 @@ export function encodeState(state: SimState): Uint8Array<ArrayBuffer> {
   const { W, H, cells, life, extra, active, activeNext, stamp, heat, phase, fuel, burnFrom, pressure } = state
   const n = W * H
   const c = active.length
+  validateShape(W, H, c)
   if (cells.length !== n || life.length !== n || extra.length !== n) {
     throw new StateFormatError('cell array length does not match W*H')
   }
@@ -127,6 +143,7 @@ export function decodeState(bytes: Uint8Array): DecodedState {
   const tick = view.getUint32(7, true)
   const rngState = view.getUint32(11, true)
   const c = view.getUint32(15, true)
+  validateShape(W, H, c)
   const n = W * H
   if (bytes.length !== byteLength(n, c)) {
     throw new StateFormatError('state length does not match its declared size')
@@ -161,5 +178,15 @@ export function decodeState(bytes: Uint8Array): DecodedState {
   const pressure = new Uint16Array(n)
   for (let i = 0; i < n; i++) pressure[i] = view.getUint16(p + i * 2, true)
 
+  if (cells.some(m => !validMaterial(m)) || burnFrom.some(m => !validMaterial(m))) {
+    throw new StateFormatError('invalid material in state')
+  }
+  if (active.some(a => a > 1) || activeNext.some(a => a > 1)) throw new StateFormatError('invalid activity flag')
+  for (let i = 0; i < n; i++) {
+    if (!Number.isFinite(heat[i]) || heat[i] < MIN_TEMP || heat[i] > MAX_TEMP || !Number.isInteger(heat[i] * TEMP_SCALE)) {
+      throw new StateFormatError('temperature is outside the Q4 range')
+    }
+    if (pressure[i] > 4095) throw new StateFormatError('pressure exceeds cap')
+  }
   return { version, W, H, tick, rngState, cells, life, extra, active, activeNext, stamp, heat, phase, fuel, burnFrom, pressure }
 }
