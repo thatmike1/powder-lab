@@ -46,7 +46,7 @@ significant; report distributions and the same harness again at unit 7.
    keep thermal state across transitions and serialize new phase progress.
 3. **Complete:** temperature ignition, finite fuel, smoke and heat, quenching;
    serialize fuel and prevent counter underflow.
-4. **Pending:** integer gas pressure, expansion from boiling/combustion, venting,
+4. **Complete:** integer gas pressure, expansion from boiling/combustion, venting,
    material strength and ruptures; pressure in snapshots and checksums.
 5. **Pending:** readable heat view/legend and heat/cool brushes using the existing
    batched lockstep paint path; tools never become cell materials.
@@ -76,7 +76,7 @@ remote exists (origin is configured).
 
 ## Next
 
-Implement unit 4. Unit 1: Q4 temperatures and integer face flux; conduct before
+Implement unit 5. Unit 1: Q4 temperatures and integer face flux; conduct before
 movement, advect heat with particles, precomputed harmonic conductivity, cheaper
 chunk waking. Minimum one-quantum ambient cooling prevents an integer tail from
 keeping chunks awake forever. Retuned fire emission/wood ignition for the changed
@@ -99,3 +99,12 @@ anchored, consuming fuel while emitting heat and smoke; loose flames rise.
 Water/cooling quenches flames; the final fuel tick saturates at zero instead of
 wrapping a Uint8 lifespan. Added ignition/consumption/smoke, last-fuel and active
 burn snapshot tests. 149 tests pass in 19 files; type-check/build pass.
+
+Unit 4: integer pressure exchanges through air/gases, vents at open grid edges,
+and remains in sealed regions. Boiling/combustion/gunpowder inject expansion;
+pressure shifts water thresholds. Material strengths drive visible rupture and
+debris, with indestructible Wall preserved. Spatial pressure is serialized in
+state v4 and checksummed; its scratch buffer is rebuilt each pass. Added sealed
+vs vented, boiling glass rupture, fire pressure, wall immunity and pressure
+snapshot continuation checks. 154 tests pass in 20 files; type-check/build pass.
+The model and approximations are documented in docs/thermodynamics.md.

@@ -105,6 +105,19 @@ FUEL[Mat.PLANT] = 90
 FUEL[Mat.GUNPOWDER] = 32
 FUEL[Mat.FIRE] = 100
 
+// Pressure permeates air and gases, never solids/liquids. Gauge units are a
+// sandbox scale; stronger enclosures withstand larger trapped gas expansion.
+export const GAS = new Uint8Array(MAT_COUNT)
+for (const m of [Mat.EMPTY, Mat.FIRE, Mat.SMOKE, Mat.STEAM, Mat.LIGHTNING]) GAS[m] = 1
+export const STRENGTH = new Uint16Array(MAT_COUNT)
+STRENGTH[Mat.GLASS] = 300
+STRENGTH[Mat.WOOD] = 600
+STRENGTH[Mat.PLANT] = 200
+STRENGTH[Mat.ICE] = 450
+STRENGTH[Mat.STONE] = 1600
+STRENGTH[Mat.METAL] = 3200
+STRENGTH[Mat.WALL] = 65535 // indestructible even at the pressure cap
+
 // A "movable" cell can be displaced by density swaps (liquids + gases + fire).
 // Powders are intentionally NOT movable-by-others, so water rests on sand etc.
 const movable = new Uint8Array(MAT_COUNT)

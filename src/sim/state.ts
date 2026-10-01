@@ -15,11 +15,11 @@
 //   11 u32  rng state word
 //   15 u32  chunk count (length of the activity arrays)
 //   19 ...  cells[n], life[n], extra[n], active[c], activeNext[c],
-//           stamp[n] as i32, heat[n] as Q4 f32 degrees, phase[n] as i16, fuel[n] as u16, burnFrom[n] as u8
+//           stamp[n] as i32, heat[n] as Q4 f32 degrees, phase[n] as i16, fuel[n] as u16, burnFrom[n] as u8, pressure[n] as u16
 
 const MAGIC0 = 0x50 // 'P'
 const MAGIC1 = 0x53 // 'S'
-const VERSION = 3
+const VERSION = 4
 const HEADER = 19
 
 /** thrown when bytes aren't a recognizable full simulation state. */
@@ -45,6 +45,7 @@ export interface SimState {
   phase: Int16Array
   fuel: Uint16Array
   burnFrom: Uint8Array
+  pressure: Uint16Array
 }
 
 export interface DecodedState extends SimState {
@@ -53,7 +54,7 @@ export interface DecodedState extends SimState {
 
 /** total byte length a state of this size encodes to. */
 function byteLength(n: number, c: number): number {
-  return HEADER + 3 * n + 2 * c + 4 * n + 4 * n + 2 * n + 3 * n
+  return HEADER + 3 * n + 2 * c + 4 * n + 4 * n + 2 * n + 3 * n + 2 * n
 }
 
 /**
@@ -62,13 +63,13 @@ function byteLength(n: number, c: number): number {
  * different machines produce identical bytes.
  */
 export function encodeState(state: SimState): Uint8Array<ArrayBuffer> {
-  const { W, H, cells, life, extra, active, activeNext, stamp, heat, phase, fuel, burnFrom } = state
+  const { W, H, cells, life, extra, active, activeNext, stamp, heat, phase, fuel, burnFrom, pressure } = state
   const n = W * H
   const c = active.length
   if (cells.length !== n || life.length !== n || extra.length !== n) {
     throw new StateFormatError('cell array length does not match W*H')
   }
-  if (stamp.length !== n || heat.length !== n || phase.length !== n || fuel.length !== n || burnFrom.length !== n) {
+  if (stamp.length !== n || heat.length !== n || phase.length !== n || fuel.length !== n || burnFrom.length !== n || pressure.length !== n) {
     throw new StateFormatError('stamp/heat length does not match W*H')
   }
   if (activeNext.length !== c) {
@@ -106,6 +107,8 @@ export function encodeState(state: SimState): Uint8Array<ArrayBuffer> {
   for (let i = 0; i < n; i++) view.setUint16(p + i * 2, fuel[i], true)
   p += n * 2
   out.set(burnFrom, p)
+  p += n
+  for (let i = 0; i < n; i++) view.setUint16(p + i * 2, pressure[i], true)
   return out
 }
 
@@ -155,6 +158,8 @@ export function decodeState(bytes: Uint8Array): DecodedState {
   for (let i = 0; i < n; i++) fuel[i] = view.getUint16(p + i * 2, true)
   p += n * 2
   const burnFrom = take(n)
+  const pressure = new Uint16Array(n)
+  for (let i = 0; i < n; i++) pressure[i] = view.getUint16(p + i * 2, true)
 
-  return { version, W, H, tick, rngState, cells, life, extra, active, activeNext, stamp, heat, phase, fuel, burnFrom }
+  return { version, W, H, tick, rngState, cells, life, extra, active, activeNext, stamp, heat, phase, fuel, burnFrom, pressure }
 }
