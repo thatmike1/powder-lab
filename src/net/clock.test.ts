@@ -27,13 +27,23 @@ describe('TickClock', () => {
     expect(clock.serverTick(5_000 + 100 * TICK_MS)).toBe(850)
   })
 
-  it('takes the minimum sample so a slow frame cannot drag the estimate', () => {
+  it('takes the largest signed offset so delayed packets cannot drag the estimate', () => {
     const clock = new TickClock()
     clock.start(10_000, 750, 10_000) // offset sample 0
-    clock.sample(11_000, 10_800) // 200 ms of extra delay in this frame
-    clock.sample(12_000, 11_900) // 100 ms
+    clock.sample(11_000, 11_200) // 200 ms of extra delay in this frame
+    clock.sample(12_000, 12_100) // 100 ms
     expect(clock.offset).toBe(0)
     expect(clock.serverTick(10_000)).toBe(750)
+  })
+
+  it('ignores a multi-second snapshot stall with a negative clock skew', () => {
+    const clock = new TickClock()
+    // Client clock is 500 ms ahead, so its true offset is -500 ms.
+    clock.start(10_000, 750, 10_500)
+    clock.sample(11_000, 13_500) // snapshot received two seconds late
+    clock.sample(12_000, 12_510) // lightweight packet, ten ms late
+    expect(clock.offset).toBe(-500)
+    expect(clock.serverTick(14_500)).toBe(1050)
   })
 
   it('follows the clock once every stale sample has left the window', () => {

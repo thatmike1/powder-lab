@@ -54,8 +54,8 @@ significant; report distributions and the same harness again at unit 7.
    live mid-reaction snapshot continuation, chunk borders, network replay.
 7. **Complete:** repeat identical benchmark, optimize active passes and conduction;
    record timing and practical budget limits, no timing-based simulation branches.
-8. **Pending:** tune reactions, showcase the existing oil/lava/gunpowder plus
-   useful thermal materials and gallery contraptions; browser visual check.
+8. **Complete:** tuned reactions, powered Heater/Chiller materials, thermal
+   gallery contraptions, desktop/mobile visual checks and actual relay parity.
 
 Each unit is also tracked under beads epic powder-lab-t7i. Before every commit:
 `npm run typecheck`, single-worker Vitest, and `npm run build`. Update this file
@@ -76,7 +76,10 @@ remote exists (origin is configured).
 
 ## Next
 
-Implement unit 8. Unit 1: Q4 temperatures and integer face flux; conduct before
+All nine units are implemented and verified. Finish unit-8 checkpoint/push and
+the final summary; no further physics implementation is required.
+
+Unit 1: Q4 temperatures and integer face flux; conduct before
 movement, advect heat with particles, precomputed harmonic conductivity, cheaper
 chunk waking. Minimum one-quantum ambient cooling prevents an integer tail from
 keeping chunks awake forever. Retuned fire emission/wood ignition for the changed
@@ -158,3 +161,48 @@ leaving ample render headroom. Occasional p99 host scheduling pauses exceed a
 tick; these are CPU step timings, not a claim about end-to-end rendering FPS.
 An earlier isolated full-lava run measured 7.211 mean/7.144 median/7.490 p95,
 illustrating the server's load variance.
+
+Unit 8: added stationary Heater (J, 1200°) and Chiller (U, -120°), material hints,
+and three playable presets: Hot & Cold, Pressure Cooker and Glassworks. Existing
+oil/lava/gunpowder remain useful reaction materials. Preset randomness now uses
+the engine's Rng implementation. The hourglass benchmark is selected by ID so
+new gallery entries do not change its fixture. Rising bubbles now carry gas
+pressure when they displace water, fixing pressure loss in the real boiler;
+gas/gas pressure remains spatial. Added bubble and full-size preset regressions.
+Updated stale characterization comments without removing their tests.
+
+Actual two-browser testing against an isolated local relay caught an existing
+clock-filter sign error: delayed full-state frames were selected as the fastest
+sample, pulling a client's room clock behind. The filter now chooses the largest
+signed offset, with delayed-arrival/negative-skew regressions. Paused preset,
+Heat and Cool inputs produce byte-identical downloaded states; live checksum
+pairs match at ticks 600, 900, 1200 and 1500. The relay and browsers are stopped.
+
+Cached Chromium visually verified the boiling/freezing heat view, glass rupture,
+material controls and mobile gallery/heat view. Fixed intrinsic thumbnail width
+overflow and bounded the mobile drawer height. A live 540,279-byte `.powder`
+download/import/download round trip is byte-identical, with no page errors.
+Final Node/Chromium 2,000-tick parity is 31,141 identical bytes, SHA-256
+`e763a5317bf93f0e43e063bd71592c24dfa41228af475f1f72bbbd59b425ed5a`.
+The long paired test also paints both new powered sources.
+
+Final gate: **170 tests in 23 files pass**, one worker; frontend/server type-check
+and production build pass. Final CPU benchmark, same 200×150 harness (ms/step):
+
+| Scene | Mean | Median | p95 | p99 |
+| --- | ---: | ---: | ---: | ---: |
+| Idle | 0.031 | 0.009 | 0.051 | 0.747 |
+| Full lava | 5.861 | 5.771 | 6.303 | 7.868 |
+| Mixed, forced active | 5.024 | 4.846 | 5.353 | 12.396 |
+| Hourglass | 0.523 | 0.522 | 0.631 | 0.706 |
+| Sealed hot steam, full active | 7.147 | 6.607 | 10.062 | 13.971 |
+| Burning fuel, full active | 5.398 | 5.297 | 5.876 | 8.014 |
+
+All mean/median/p95 costs fit the 13.33 ms budget. Host-load variance remains;
+these numbers measure simulation CPU cost, excluding rendering.
+
+Beads uses the git-compatible origin remote under `refs/dolt/data`. Its git
+subprocess needs the same SSH command as this checkout (the machine's default
+key is read-only), so sync succeeded with:
+`GIT_SSH_COMMAND="$(git config --get core.sshCommand) -o BatchMode=yes" bd dolt push`.
+No credentials or configuration outside the repo were changed.

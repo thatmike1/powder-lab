@@ -12,6 +12,7 @@
 //     shows at full strength on the black board.
 
 import { Mat } from './materials'
+import { Rng } from './rng'
 
 /** lighting the board should adopt when a scene loads (so each scene looks its best). */
 export interface SceneLight {
@@ -49,8 +50,7 @@ export const FLAT: SceneLight = { light: false, darkness: 0.55 } // full materia
 
 export class Painter {
   readonly g: Uint8Array
-  // a deterministic-enough RNG so a scene looks the same each time it loads.
-  private seed: number
+  private rng: Rng
 
   constructor(
     readonly W: number,
@@ -58,17 +58,11 @@ export class Painter {
     seed = 1,
   ) {
     this.g = new Uint8Array(W * H)
-    this.seed = seed >>> 0 || 1
+    this.rng = new Rng(seed)
   }
 
-  /** xorshift32 — cheap repeatable noise for speckle/grain. */
   private rnd(): number {
-    let s = this.seed
-    s ^= s << 13
-    s ^= s >>> 17
-    s ^= s << 5
-    this.seed = s >>> 0
-    return (this.seed & 0xffffff) / 0x1000000
+    return this.rng.next()
   }
 
   set(x: number, y: number, m: number): void {
@@ -560,11 +554,87 @@ function buildMushrooms(W: number, H: number): Uint8Array {
   return p.g
 }
 
+// Thermal contraptions use relative coordinates to fit different board sizes.
+function buildPressureCooker(W: number, H: number): Uint8Array {
+  const p = new Painter(W, H)
+  const x0 = (W * 0.3) | 0,
+    x1 = (W * 0.7) | 0
+  const top = (H * 0.3) | 0,
+    bottom = (H * 0.78) | 0
+  p.frame(x0, top, x1, bottom, Mat.GLASS)
+  p.rect(x0 + 1, bottom - 15, x1 - 1, bottom - 3, Mat.WATER)
+  p.rect(x0 + 1, bottom - 2, x1 - 1, bottom - 1, Mat.METAL)
+  p.rect(x0, bottom + 1, x1, bottom + 3, Mat.HEATER)
+  // Short conducting feet carry heat around the glass floor into the plate.
+  p.rect(x0 + 4, bottom, x0 + 8, bottom, Mat.METAL)
+  p.rect(x1 - 8, bottom, x1 - 4, bottom, Mat.METAL)
+  p.rect(0, H - 3, W - 1, H - 1, Mat.WALL)
+  return p.g
+}
+
+function buildHotCold(W: number, H: number): Uint8Array {
+  const p = new Painter(W, H)
+  const top = (H * 0.4) | 0,
+    bottom = (H * 0.8) | 0
+  for (const [left, right, source] of [
+    [0.1, 0.43, Mat.HEATER],
+    [0.57, 0.9, Mat.COOLER],
+  ]) {
+    const x0 = (W * left) | 0,
+      x1 = (W * right) | 0
+    p.frame(x0, top, x1, bottom, Mat.WALL)
+    p.rect(x0 + 1, top, x1 - 1, top, Mat.EMPTY)
+    p.rect(x0 + 1, bottom - 18, x1 - 1, bottom - 3, Mat.WATER)
+    p.rect(x0 + 1, bottom - 2, x1 - 1, bottom - 1, Mat.METAL)
+    p.rect(x0 + 1, bottom, x1 - 1, bottom, source)
+  }
+  return p.g
+}
+
+function buildGlassworks(W: number, H: number): Uint8Array {
+  const p = new Painter(W, H)
+  const x0 = (W * 0.25) | 0,
+    x1 = (W * 0.75) | 0,
+    bottom = (H * 0.85) | 0
+  p.frame(x0, (H * 0.38) | 0, x1, bottom, Mat.WALL)
+  p.rect(x0 + 1, (H * 0.38) | 0, x1 - 1, (H * 0.38) | 0, Mat.EMPTY)
+  p.rect(x0 + 1, bottom - 15, x1 - 1, bottom - 1, Mat.SAND)
+  p.rect(x0 + 1, bottom - 36, x1 - 1, bottom - 17, Mat.LAVA)
+  return p.g
+}
+
 // ---------------------------------------------------------------------------
 // the catalogue.
 // ---------------------------------------------------------------------------
 
 export const PRESETS: Preset[] = [
+  {
+    id: 'pressure-cooker',
+    name: 'Pressure Cooker',
+    tag: 'BURST',
+    blurb: 'a glass boiler pops; erase its lid to vent the steam',
+    group: 'contraption',
+    light: FLAT,
+    build: buildPressureCooker,
+  },
+  {
+    id: 'hot-cold',
+    name: 'Hot & Cold',
+    tag: 'PHASE',
+    blurb: 'one bath boils while the other freezes; try heat view',
+    group: 'contraption',
+    light: FLAT,
+    build: buildHotCold,
+  },
+  {
+    id: 'glassworks',
+    name: 'Glassworks',
+    tag: 'FUSE',
+    blurb: 'molten lava fuses a sand bed into pale glass',
+    group: 'contraption',
+    light: DRAMA,
+    build: buildGlassworks,
+  },
   {
     id: 'hourglass',
     name: 'Hourglass',

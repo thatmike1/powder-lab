@@ -26,3 +26,4 @@ Thumbs.db
 .dolt/
 *.db
 .beads-credential-key
+.beads.gate.lock

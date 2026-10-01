@@ -249,7 +249,11 @@ export function useSimulation(W: number, H: number, scale: number) {
       // presence is cosmetic and outside lockstep — throttled inside the session.
       session.sendCursor(gx, gy)
       pointer.current.inside = gx >= 0 && gx < W && gy >= 0 && gy < H
-      if (!pointer.current.down) { pointer.current.x = gx; pointer.current.y = gy; return }
+      if (!pointer.current.down) {
+        pointer.current.x = gx
+        pointer.current.y = gy
+        return
+      }
       const now = performance.now()
       // Interpolate so fast strokes don't leave gaps.
       const px = pointer.current.x,
@@ -275,7 +279,9 @@ export function useSimulation(W: number, H: number, scale: number) {
         canvas.releasePointerCapture(e.pointerId)
       } catch {}
     }
-    const onLeave = () => { pointer.current.inside = false }
+    const onLeave = () => {
+      pointer.current.inside = false
+    }
     const onCtx = (e: Event) => e.preventDefault()
 
     canvas.addEventListener('pointerdown', onDown)
@@ -336,11 +342,16 @@ export function useSimulation(W: number, H: number, scale: number) {
         const fps = Math.round((frames * 1000) / (now - fpsT))
         frames = 0
         fpsT = now
-        const p = pointer.current, i = p.y * W + p.x
+        const p = pointer.current,
+          i = p.y * W + p.x
         const probe = sim && p.inside && p.x >= 0 && p.x < W && p.y >= 0 && p.y < H
-        setUi((u) => ({ ...u, fps, count: sim?.count ?? u.count,
+        setUi((u) => ({
+          ...u,
+          fps,
+          count: sim?.count ?? u.count,
           temperature: probe ? Math.round(sim.heat[i]) : null,
-          pressure: probe ? sim.pressure[i] : null }))
+          pressure: probe ? sim.pressure[i] : null,
+        }))
       }
       raf = requestAnimationFrame(loop)
     }
@@ -509,7 +520,11 @@ export function useSimulation(W: number, H: number, scale: number) {
           const state = decodeState(bytes)
           if (state.W !== W || state.H !== H) throw new Error('Wrong board dimensions')
           if (session.connected) {
-            session.sendInput({ type: 'setState', state: encodeStateEnvelope(session.roomTick, false, bytes), reason: 'load' })
+            session.sendInput({
+              type: 'setState',
+              state: encodeStateEnvelope(session.roomTick, false, bytes),
+              reason: 'load',
+            })
             session.sendInput({ type: 'running', on: false })
           } else if (sim.loadState(bytes)) {
             cfg.current.running = false

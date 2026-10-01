@@ -62,7 +62,7 @@ measure(
 )
 measure('gallery-first-contraption', () => {
   const s = new Simulation(W, H, 42)
-  s.restore(PRESETS.find((p) => p.group === 'contraption')!.build(W, H))
+  s.restore(PRESETS.find((p) => p.id === 'hourglass')!.build(W, H))
   return s
 })
 

@@ -23,13 +23,15 @@ export const Mat = {
   // names a brush mode (like Eraser reuses EMPTY). Kept inside MAT_COUNT so the
   // property tables stay densely indexed, but it's intercepted before any paint.
   MAGNET: 18,
+  GLASS: 19, // formed when sand fuses under sustained heat
   HEAT: 20, // thermal brush, never a cell
   COOL: 21, // thermal brush, never a cell
-  GLASS: 19, // formed when sand melts under sustained lava heat
+  HEATER: 22, // powered stationary hot source
+  COOLER: 23, // powered stationary cold sink
 } as const
 
 export type MatId = number
-export const MAT_COUNT = 22
+export const MAT_COUNT = 24
 
 // Density drives displacement: a denser mover sinks through / swaps with a
 // lighter *movable* cell. Static solids (wall, stone, wood, plant, ice) are
@@ -74,8 +76,8 @@ CONDUCT[Mat.FILINGS] = 0.9
 
 // Thermal tables in accelerated sandbox degrees. Water uses familiar 0/100
 // boundaries; the sand fusion gate is scaled for visible glass-making in lava.
-// Only fire, lava and lightning continuously emit. Ice and steam are seeded at
-// spawn temperature and then exchange a finite amount of heat.
+// Fire, lava, lightning and powered sources continuously emit. Ice and steam
+// start at spawn temperature, then exchange a finite amount of heat.
 export const emitTemp = new Float32Array(MAT_COUNT)
 emitTemp[Mat.FIRE] = 1500
 emitTemp[Mat.LAVA] = 1100
@@ -83,6 +85,8 @@ emitTemp[Mat.ICE] = -40
 emitTemp[Mat.STEAM] = 120
 emitTemp[Mat.SMOKE] = 80
 emitTemp[Mat.LIGHTNING] = 1800
+emitTemp[Mat.HEATER] = 1200
+emitTemp[Mat.COOLER] = -120
 
 export const ignitionPoint = new Float32Array(MAT_COUNT)
 ignitionPoint[Mat.GUNPOWDER] = 120
@@ -118,6 +122,8 @@ STRENGTH[Mat.PLANT] = 200
 STRENGTH[Mat.ICE] = 450
 STRENGTH[Mat.STONE] = 1600
 STRENGTH[Mat.METAL] = 3200
+STRENGTH[Mat.HEATER] = 4095
+STRENGTH[Mat.COOLER] = 4095
 STRENGTH[Mat.WALL] = 65535 // indestructible even at the pressure cap
 
 // A "movable" cell can be displaced by density swaps (liquids + gases + fire).
@@ -153,15 +159,37 @@ export interface MatMeta {
   name: string
   rgb: [number, number, number] // swatch color
   cat: 'Tools' | 'Powders' | 'Liquids' | 'Solids' | 'Energy'
+  hint?: string
   key?: string // keyboard shortcut
 }
 
 export const PALETTE: MatMeta[] = [
   { id: Mat.EMPTY, name: 'Eraser', rgb: [30, 33, 38], cat: 'Tools', key: 'E' },
-  { id: Mat.WALL, name: 'Wall', rgb: [120, 122, 130], cat: 'Tools', key: 'W' },
+  {
+    id: Mat.WALL,
+    name: 'Wall',
+    hint: 'Indestructible and thermally insulating',
+    rgb: [120, 122, 130],
+    cat: 'Tools',
+    key: 'W',
+  },
   { id: Mat.MAGNET, name: 'Magnet', rgb: [196, 72, 84], cat: 'Tools', key: 'N' },
-  { id: Mat.HEAT, name: 'Heat', rgb: [255, 126, 64], cat: 'Tools', key: 'B' },
-  { id: Mat.COOL, name: 'Cool', rgb: [84, 172, 240], cat: 'Tools', key: 'K' },
+  {
+    id: Mat.HEAT,
+    name: 'Heat',
+    hint: 'Warm cells to boil water, ignite fuel or fuse sand',
+    rgb: [255, 126, 64],
+    cat: 'Tools',
+    key: 'B',
+  },
+  {
+    id: Mat.COOL,
+    name: 'Cool',
+    hint: 'Freeze water, quench flames and solidify lava',
+    rgb: [84, 172, 240],
+    cat: 'Tools',
+    key: 'K',
+  },
 
   { id: Mat.SAND, name: 'Sand', rgb: [196, 180, 120], cat: 'Powders', key: '1' },
   { id: Mat.GUNPOWDER, name: 'Gunpowder', rgb: [70, 68, 78], cat: 'Powders', key: '2' },
@@ -177,8 +205,31 @@ export const PALETTE: MatMeta[] = [
   { id: Mat.WOOD, name: 'Wood', rgb: [112, 74, 42], cat: 'Solids', key: '8' },
   { id: Mat.PLANT, name: 'Plant', rgb: [46, 160, 60], cat: 'Solids', key: '9' },
   { id: Mat.ICE, name: 'Ice', rgb: [170, 210, 235], cat: 'Solids', key: '0' },
-  { id: Mat.GLASS, name: 'Glass', rgb: [200, 225, 235], cat: 'Solids', key: 'A' },
+  {
+    id: Mat.GLASS,
+    name: 'Glass',
+    hint: 'Fused sand; brittle under trapped gas pressure',
+    rgb: [200, 225, 235],
+    cat: 'Solids',
+    key: 'A',
+  },
 
+  {
+    id: Mat.HEATER,
+    name: 'Heater',
+    hint: 'Stationary heat source at 1200°; build a boiler around it',
+    rgb: [238, 106, 62],
+    cat: 'Energy',
+    key: 'J',
+  },
+  {
+    id: Mat.COOLER,
+    name: 'Chiller',
+    hint: 'Stationary cold source at −120°; metal spreads the chill',
+    rgb: [84, 180, 220],
+    cat: 'Energy',
+    key: 'U',
+  },
   { id: Mat.FIRE, name: 'Fire', rgb: [255, 150, 40], cat: 'Energy', key: 'F' },
   { id: Mat.LIGHTNING, name: 'Lightning', rgb: [190, 205, 255], cat: 'Energy', key: 'Z' },
   { id: Mat.SMOKE, name: 'Smoke', rgb: [90, 90, 96], cat: 'Energy', key: 'S' },

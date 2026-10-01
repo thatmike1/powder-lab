@@ -4,9 +4,13 @@ import { FUEL, Mat } from './materials'
 
 describe('finite combustion', () => {
   it('ignites hot wood, burns in place, consumes fuel and produces smoke', () => {
-    const s = new Simulation(32, 24, 4), i = 12 * 32 + 16
+    const s = new Simulation(32, 24, 4),
+      i = 12 * 32 + 16
     s.paint(16, 12, 0, Mat.WOOD)
-    for (let t = 0; t < 20 && s.cells[i] !== Mat.FIRE; t++) { s.heat[i] = 600; s.step() }
+    for (let t = 0; t < 20 && s.cells[i] !== Mat.FIRE; t++) {
+      s.heat[i] = 600
+      s.step()
+    }
     expect(s.cells[i]).toBe(Mat.FIRE)
     expect(s.fuel[i]).toBe(FUEL[Mat.WOOD])
     s.step(20)
@@ -14,7 +18,10 @@ describe('finite combustion', () => {
     expect(s.fuel[i]).toBeLessThan(FUEL[Mat.WOOD])
     expect(s.heat[i]).toBeGreaterThan(1000)
     let smoke = false
-    for (let t = 0; t < 300; t++) { s.step(); smoke ||= s.cells.includes(Mat.SMOKE) }
+    for (let t = 0; t < 300; t++) {
+      s.step()
+      smoke ||= s.cells.includes(Mat.SMOKE)
+    }
     expect(smoke).toBe(true)
     expect(s.cells.includes(Mat.FIRE)).toBe(false)
     expect(s.fuel[i]).toBe(0)
@@ -35,7 +42,8 @@ describe('finite combustion', () => {
     a.step(30)
     const b = new Simulation(32, 24, 91)
     expect(b.loadState(a.serializeState())).toBe(true)
-    a.step(400); b.step(400)
+    a.step(400)
+    b.step(400)
     expect(b.serializeState()).toEqual(a.serializeState())
   })
 })

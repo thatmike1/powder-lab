@@ -1,15 +1,15 @@
 import { TICK_MS } from './protocol'
 
-/** how many offset samples the minimum filter looks back over */
+/** how many offset samples the fastest-packet filter looks back over */
 export const CLOCK_WINDOW = 32
 
 /**
  * estimates the server's tick from the local clock.
  *
  * every server frame carries the wall clock at which it was sent, so one sample
- * is `serverTime - localNow`, which overshoots by exactly the one-way network
- * delay. taking the MINIMUM over a window rather than an average is the standard
- * fix: the smallest sample is the one that travelled fastest, so it carries the
+ * is `serverTime - localNow`, which undershoots by exactly the one-way network
+ * delay. taking the MAXIMUM signed offset over a window selects the fastest
+ * frame: the largest sample is the one that travelled fastest, so it carries the
  * least delay, and a burst of slow frames cannot drag the estimate along with it.
  */
 export class TickClock {
@@ -36,11 +36,11 @@ export class TickClock {
     return this.started && this.samples.length > 0
   }
 
-  /** local-to-server clock offset in ms, minimum-filtered over the window */
+  /** local-to-server clock offset in ms, maximum-filtered over the window */
   get offset(): number {
     let best = 0
     for (let i = 0; i < this.samples.length; i++) {
-      if (i === 0 || this.samples[i] < best) best = this.samples[i]
+      if (i === 0 || this.samples[i] > best) best = this.samples[i]
     }
     return best
   }

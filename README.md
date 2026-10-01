@@ -1,6 +1,9 @@
 # Powder Lab ⚗️
 
-A falling-sand sandbox in the browser — paint ~14 materials and watch them flow, burn, dissolve, and react. Built with React + TypeScript + Vite, with the entire 60fps simulation running on a plain canvas *outside* React's render cycle.
+A falling-sand sandbox in the browser — paint powders, liquids, gases and solids
+and watch them flow, burn, dissolve and react. Built with React + TypeScript +
+Vite, with a 75 Hz simulation running on a plain canvas outside React's render
+cycle.
 
 ### ▶ [Play it live](https://powder.ssscribe.app/) — multiplayer, start a room and share the link
 ### ▶ [Single-player mirror](https://thatmike1.github.io/powder-lab/) (GitHub Pages, no relay)
@@ -9,17 +12,22 @@ A falling-sand sandbox in the browser — paint ~14 materials and watch them flo
 
 ## Features
 
-- **14 materials** across powders, liquids, solids, and energy: sand, water, oil, acid, lava, stone, wood, plant, ice, fire, smoke, steam, gunpowder, walls.
+- **Materials** include sand, water, oil, acid, lava, stone, wood, plant, ice,
+  fire, smoke, steam, gunpowder, metal, filings, glass, heaters, chillers and walls.
 - **Real reactions:**
   - 🌋 Lava + water → **stone + steam**
   - 🔥 Fire spreads through wood / oil / plants and gets **doused** by water (→ steam)
   - 🧪 Acid **dissolves** solids and powders
   - 🌱 Plants **creep** along water
-  - 🧊 Ice **melts** near heat and slowly **freezes** adjacent water
+  - 🧊 Ice warms and **melts**; cooling water **freezes** it
   - 💥 Gunpowder **chain-detonates**
+- **Thermodynamics:** conducted temperature, latent heat, steam condensation,
+  finite fuel, smoke and trapped-gas pressure that can rupture an enclosure.
+- **Heat view, Heat/Cool brushes and thermal gallery scenes** for experimenting.
 - **Density-based layering** — oil floats on water, lava sinks through everything, sand rests under water.
 - **Real-time bloom/glow** on fire and lava.
-- Buttery **120 fps** thanks to a dirty-chunk scheduler that only simulates regions where something is actually moving.
+- **Dirty-chunk scheduling** only processes regions with movement, thermal
+  changes or gas pressure.
 
 ![Powder Lab — explosion + glow](.preview/scene-2.png)
 
@@ -34,6 +42,9 @@ A falling-sand sandbox in the browser — paint ~14 materials and watch them flo
 | Pause / play | `Space` |
 | Clear | `C` |
 | Toggle glow | `G` |
+| Heat view | `H` |
+| Heat / Cool brush | `B` / `K` |
+| Heater / Chiller | `J` / `U` |
 | Brush size | `[` and `]` |
 
 ## Run it
@@ -92,14 +103,18 @@ The interesting architectural choice: **React owns the chrome, an imperative cor
 
 ```
 src/
-  sim/materials.ts    # material IDs + property tables (density, flammability) + UI palette
+  sim/materials.ts    # material IDs + physical property tables + UI palette
+  sim/thermal.ts      # fixed-point heat operations + conductivity and color lookup
+  sim/state.ts        # complete, versioned little-endian multiplayer/save state
   sim/Simulation.ts   # the engine: cellular-automaton rules, reactions, chunk scheduler, renderer
   useSimulation.ts    # the rAF loop + pointer/keyboard input — the bridge between React and the sim
   App.tsx             # toolbar / canvas / controls UI
 ```
 
 - **No `setState` in the hot loop.** The render loop reads a mutable `useRef` config object, so changing the brush or material never triggers a React re-render. React state is just a *mirror* for displaying the toolbar.
-- **Dirty-chunk scheduling.** The grid is split into 16×16 chunks; each frame only simulates chunks flagged active, and any cell that changes wakes its neighborhood for the next frame. Settled regions cost nothing — the same trick the game *Noita* uses.
+- **Dirty-chunk scheduling.** The grid is split into 16×16 chunks; each tick only
+  simulates active chunks, and changing cells wake their neighborhood for the
+  next tick. Settled regions skip the physics passes.
 - **Data-driven materials.** Each material is an ID plus a row of properties. Complex behavior (pyramids, oil/water separation, fire fronts) emerges from a handful of local rules.
 
 ## License
@@ -114,9 +129,14 @@ or fuse sand, and **Cool** (`K`) to freeze water, condense steam or solidify lav
 Metal carries heat; stone slows it and Wall insulates. Ice warms and melts;
 steam condenses instead of fading away. Wood, plants and oil have finite fuel.
 Sealed steam and burning pockets build pressure and can rupture glass/wood/stone;
-Wall survives. Try a glass enclosure with water over lava, then open a vent.
+Wall survives. **Heater** (`J`) and **Chiller** (`U`) provide stationary hot/cold
+sources. Try **Hot & Cold**, **Pressure Cooker** and **Glassworks** in the
+Gallery; load a scene and press Play.
 
 `.powder` downloads now preserve temperature, latent heat, fuel, pressure and
 chunk/PRNG state. Older files still load. Shared URL links remain compact
-material layouts and reset temperatures. See [thermal model](docs/thermodynamics.md)
-for the accelerated units, thresholds and deterministic implementation.
+material layouts and reset temperatures. All room peers must use the same build;
+incompatible full-state versions disconnect with a reload message. See
+[thermal model](docs/thermodynamics.md) for the accelerated units, thresholds and
+deterministic implementation, and [PROGRESS.md](PROGRESS.md) for measured costs
+and verification. `npm run bench:sim -- --stress` repeats the CPU benchmark.

@@ -213,7 +213,11 @@ export class NetSession {
   }
 
   private handleClose(reason: string): void {
-    if (this.statusValue === 'disconnected' || (this.statusValue === 'error' && this.transport === null)) return
+    if (
+      this.statusValue === 'disconnected' ||
+      (this.statusValue === 'error' && this.transport === null)
+    )
+      return
     this.transport = null
     this.resetRoom()
     // a drop mid-session is an error the user should see; a drop while dialling
@@ -447,7 +451,8 @@ export class NetSession {
     this.transport = null
     transport?.close()
     this.resetRoom()
-    this.errorValue = 'Room state is incompatible or damaged. Reload all peers to the same build and start a new room.'
+    this.errorValue =
+      'Room state is incompatible or damaged. Reload all peers to the same build and start a new room.'
     this.setStatus('error')
   }
 
@@ -457,7 +462,10 @@ export class NetSession {
    * the normal drain replays them while `advance` steps forward to the present.
    */
   private resync(state: string): void {
-    if (!this.adoptState(state)) { this.rejectState(); return }
+    if (!this.adoptState(state)) {
+      this.rejectState()
+      return
+    }
     // the server hands a joiner its first state through the same path, so a
     // correction in the first seconds of a room is the handshake, not a desync.
     if (this.now() - this.joinedAt > JOIN_GRACE_MS) this.desyncsValue++

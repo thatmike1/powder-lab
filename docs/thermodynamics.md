@@ -17,12 +17,16 @@ gradients and precomputed Q10 harmonic face conductivity drive a stable
 four-neighbor Jacobi stencil. Ambient cooling goes toward 20, by at least one
 quantum until it settles. Conducting metal bridges heat; stone/wood/glass slow
 it; Wall is an ideal insulator. Particle swaps carry heat, latent energy and
-fuel. Pressure stays in space.
+fuel. Pressure stays in space between gas cells; a gas/liquid displacement
+carries the displaced gas volume's pressure into its new cell.
 
 Painted ice starts at -40 and has finite cold energy. Steam starts at 120.
 Fire consumes finite fuel while emitting at 1500; lava is deliberately a
-persistent 1100-degree reservoir so streams stay molten in air. Wet lava
-solidifies into stone. Lightning briefly emits at 1800.
+persistent 1100-degree reservoir so streams stay molten in air. Wet lava or the
+Cool brush solidifies it into stone. Lightning briefly emits at 1800. The new
+stationary **Heater** (1200) and **Chiller** (-120) act as powered reservoirs;
+conducting metal plates spread their heat/cold into a bath. They are intentionally
+infinite sources, unlike ice and burning fuel.
 
 ## Phases and combustion
 
@@ -64,4 +68,36 @@ Old state versions are rejected with an actionable disconnect instead of
 loading missing physics. Checksums cover every persistent field, including the
 exact Q4 temperature, PRNG and chunk queues.
 The legacy RLE scene format contains materials only and reseeds their spawn
-state; it is separate from multiplayer snapshots.
+state; it is separate from multiplayer snapshots. Full `.powder` downloads
+retain a live reaction exactly, including sleeping chunks.
+
+The clock uses the largest signed `serverTime - localNow` sample in a rolling
+window: the fastest packet has the least delay. Delayed full-state frames must
+not pull one client's room clock behind its peers. Input assignment, ordering
+and batching remain the same as before.
+
+## Try it
+
+Open **Gallery**, choose a scene, then press **Play**:
+
+- **Hot & Cold:** a heater boils one bath while a chiller freezes the other.
+  Press **H** for the temperature view; hover to read temperature and pressure.
+- **Pressure Cooker:** heated water fills a glass vessel with steam and ruptures
+  it. Erase part of the lid before starting to compare an open vent.
+- **Glassworks:** lava fuses a bed of sand into glass. Paint **Cool** to leave a
+  stone crust over it.
+
+Paint **Heat** with **B**, **Cool** with **K**, **Heater** with **J** and
+**Chiller** with **U**. Oil, wood, plants and gunpowder respond to heating;
+water and cooling extinguish fire. Brushes apply while paused; phases react
+when stepping resumes. Palette tooltips describe the new materials.
+
+## Verification and budget
+
+`npm test -- --maxWorkers=1 --minWorkers=1` includes a paired 4096-tick thermal
+script that compares complete state bytes after every tick, render differences,
+scratch-buffer poisoning and mid-reaction reloads. Additional tests cover phase
+reversal, chunk borders, finite fuel, gas confinement/venting and network replay.
+`npm run bench:sim -- --stress` measures CPU step cost for 200×150 cells, with
+100 warmup and 400 measured ticks; rendering is outside those timings. The
+75 Hz step budget is 13.33 ms. See `PROGRESS.md` for results on the shared ARM box.

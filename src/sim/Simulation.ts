@@ -25,11 +25,8 @@ const CS = 16 // chunk size (cells per side)
 const AMBIENT_Q = AMBIENT * TEMP_SCALE
 const AMBIENT_BAND_Q = 2 * TEMP_SCALE
 
-// Lava crusts when a coolant-adjacent cell cools below emitTemp[LAVA] minus this
-// margin. The slow new solver drops a water-touching lava cell only ~60°/frame,
-// so the gate sits just under the emission temperature (700 - 50 = 650) to catch
-// that drop. A large delta (e.g. 150 -> threshold 550) is unreachable while the
-// cell keeps re-emitting and would leave open-air quench broken.
+// A coolant-touching lava cell crusts after a small temperature drop. Very
+// strong external cooling also solidifies lava without requiring contact.
 const LAVA_QUENCH_DELTA = 50
 
 // Background color (matches the canvas frame in CSS).
@@ -163,7 +160,9 @@ export class Simulation {
 
   /** Wake the chunk of (x,y) and any neighbor chunk a 3x3 neighbor lands in. */
   private wake(x: number, y: number): void {
-    const cx = x >> 4, cy = y >> 4, row = cy * this.chunkW
+    const cx = x >> 4,
+      cy = y >> 4,
+      row = cy * this.chunkW
     const dx = (x & 15) === 0 && cx > 0 ? -1 : (x & 15) === 15 && cx < this.chunkW - 1 ? 1 : 0
     const dy = (y & 15) === 0 && cy > 0 ? -1 : (y & 15) === 15 && cy < this.chunkH - 1 ? 1 : 0
     this.activeNext[row + cx] = 1
@@ -210,6 +209,14 @@ export class Simulation {
     const c = this.cells[i1]
     this.cells[i1] = this.cells[i2]
     this.cells[i2] = c
+    // Pressure is spatial when swapping two gas-permeable cells. Displacing
+    // liquid/solid with a bubble moves the gas volume itself, so carry its
+    // pressure into the newly occupied gas cell rather than deleting it.
+    if (GAS[this.cells[i1]] !== GAS[this.cells[i2]]) {
+      const pressure = Math.min(4095, this.pressure[i1] + this.pressure[i2])
+      this.pressure[i1] = GAS[this.cells[i1]] ? pressure : 0
+      this.pressure[i2] = GAS[this.cells[i2]] ? pressure : 0
+    }
     const l = this.life[i1]
     this.life[i1] = this.life[i2]
     this.life[i2] = l
@@ -260,15 +267,17 @@ export class Simulation {
   /** A thermal tool uses the ordinary batched paint event, so each sample
    * applies once at the same tick on every peer. It never creates a material. */
   private thermalBrush(cx: number, cy: number, r: number, delta: number): void {
-    for (let dy = -r; dy <= r; dy++) for (let dx = -r; dx <= r; dx++) {
-      if (dx * dx + dy * dy > r * r) continue
-      const x = cx + dx, y = cy + dy
-      if (x < 0 || y < 0 || x >= this.W || y >= this.H) continue
-      const i = y * this.W + x
-      if (this.cells[i] === Mat.WALL) continue
-      this.heat[i] = quantizeTemp(this.heat[i] + delta)
-      this.wake(x, y)
-    }
+    for (let dy = -r; dy <= r; dy++)
+      for (let dx = -r; dx <= r; dx++) {
+        if (dx * dx + dy * dy > r * r) continue
+        const x = cx + dx,
+          y = cy + dy
+        if (x < 0 || y < 0 || x >= this.W || y >= this.H) continue
+        const i = y * this.W + x
+        if (this.cells[i] === Mat.WALL) continue
+        this.heat[i] = quantizeTemp(this.heat[i] + delta)
+        this.wake(x, y)
+      }
   }
 
   /** materials a bolt arcs *through* (and superheats) instead of stopping at. */
@@ -442,7 +451,11 @@ export class Simulation {
    */
   restore(cells: Uint8Array): boolean {
     const n = this.W * this.H
-    if (cells.length !== n || cells.some(m => m >= MAT_COUNT || m === Mat.MAGNET || m === Mat.HEAT || m === Mat.COOL)) return false
+    if (
+      cells.length !== n ||
+      cells.some((m) => m >= MAT_COUNT || m === Mat.MAGNET || m === Mat.HEAT || m === Mat.COOL)
+    )
+      return false
     this.cells.set(cells)
     this.life.fill(0)
     this.phase.fill(0)
@@ -452,7 +465,7 @@ export class Simulation {
     this.heat.fill(AMBIENT)
     for (let i = 0; i < n; i++) {
       this.extra[i] = (this.rng.next() * 256) | 0
-      // fire/smoke/steam need a lifespan or they'd die on the first frame.
+      // Initialize transient lifetimes and steam opacity.
       this.assignSpawnLife(i, this.cells[i])
       this.fuel[i] = FUEL[this.cells[i]]
       if (this.cells[i] === Mat.STEAM) this.pressure[i] = 320
@@ -477,8 +490,8 @@ export class Simulation {
   /**
    * serialize the COMPLETE simulation state — everything a peer needs to
    * continue this exact simulation, not just what it looks like. that is
-   * `cells`, `life`, `extra`, `heat`, `stamp`, the chunk-activity queues, the
-   * PRNG state word and the tick. deliberately not the RLE scene format, which
+   * `cells`, `life`, `extra`, `heat`, `phase`, `fuel`, `burnFrom`, `pressure`,
+   * `stamp`, both chunk queues, the PRNG state word and tick. deliberately not the RLE scene format, which
    * carries `cells` only and would desync a late joiner within a few ticks.
    */
   serializeState(): Uint8Array<ArrayBuffer> {
@@ -551,15 +564,32 @@ export class Simulation {
       mix(q >> 16)
       mix(q >> 24)
     }
-    for (const p of this.phase) { mix(p); mix(p >> 8) }
-    for (const f of this.fuel) { mix(f); mix(f >> 8) }
+    for (const p of this.phase) {
+      mix(p)
+      mix(p >> 8)
+    }
+    for (const f of this.fuel) {
+      mix(f)
+      mix(f >> 8)
+    }
     for (const m of this.burnFrom) mix(m)
-    for (const p of this.pressure) { mix(p); mix(p >> 8) }
-    for (const t of this.stamp) { mix(t); mix(t >> 8); mix(t >> 16); mix(t >> 24) }
+    for (const p of this.pressure) {
+      mix(p)
+      mix(p >> 8)
+    }
+    for (const t of this.stamp) {
+      mix(t)
+      mix(t >> 8)
+      mix(t >> 16)
+      mix(t >> 24)
+    }
     for (const a of this.active) mix(a)
     for (const a of this.activeNext) mix(a)
     for (const word of [this.W, this.H, this.frame, this.rng.getState()]) {
-      mix(word); mix(word >> 8); mix(word >> 16); mix(word >> 24)
+      mix(word)
+      mix(word >> 8)
+      mix(word >> 16)
+      mix(word >> 24)
     }
     return h >>> 0
   }
@@ -603,7 +633,6 @@ export class Simulation {
     }
 
     this.flowPressure()
-
   }
 
   /**
@@ -633,13 +662,26 @@ export class Simulation {
             let flow = 0
             // Pair flux is antisymmetric: absent ambient cooling, equal-sized
             // cells exchange the same integer heat in opposite directions.
-            if (y > 0) flow += Math.trunc(((heat[i - W] * TEMP_SCALE - q) * FACE[face + cells[i - W]]) / 8192)
-            if (y < H - 1) flow += Math.trunc(((heat[i + W] * TEMP_SCALE - q) * FACE[face + cells[i + W]]) / 8192)
-            if (x > 0) flow += Math.trunc(((heat[i - 1] * TEMP_SCALE - q) * FACE[face + cells[i - 1]]) / 8192)
-            if (x < W - 1) flow += Math.trunc(((heat[i + 1] * TEMP_SCALE - q) * FACE[face + cells[i + 1]]) / 8192)
+            if (y > 0)
+              flow += Math.trunc(
+                ((heat[i - W] * TEMP_SCALE - q) * FACE[face + cells[i - W]]) / 8192,
+              )
+            if (y < H - 1)
+              flow += Math.trunc(
+                ((heat[i + W] * TEMP_SCALE - q) * FACE[face + cells[i + W]]) / 8192,
+              )
+            if (x > 0)
+              flow += Math.trunc(
+                ((heat[i - 1] * TEMP_SCALE - q) * FACE[face + cells[i - 1]]) / 8192,
+              )
+            if (x < W - 1)
+              flow += Math.trunc(
+                ((heat[i + 1] * TEMP_SCALE - q) * FACE[face + cells[i + 1]]) / 8192,
+              )
             let next = q + flow
             next += Math.sign(AMBIENT_Q - next) * Math.ceil(Math.abs(AMBIENT_Q - next) / 50)
-            if (Math.abs(next - AMBIENT_Q) > AMBIENT_BAND_Q || Math.abs(next - q) > 8) this.wake(x, y)
+            if (Math.abs(next - AMBIENT_Q) > AMBIENT_BAND_Q || Math.abs(next - q) > 8)
+              this.wake(x, y)
             else next = AMBIENT_Q
             heatNext[i] = next / TEMP_SCALE
           }
@@ -656,10 +698,12 @@ export class Simulation {
 
   private neighborPressure(x: number, y: number): number {
     const i = y * this.W + x
-    return Math.max(y > 0 ? this.pressure[i - this.W] : 0,
+    return Math.max(
+      y > 0 ? this.pressure[i - this.W] : 0,
       y < this.H - 1 ? this.pressure[i + this.W] : 0,
       x > 0 ? this.pressure[i - 1] : 0,
-      x < this.W - 1 ? this.pressure[i + 1] : 0)
+      x < this.W - 1 ? this.pressure[i + 1] : 0,
+    )
   }
 
   /** Integer Jacobi pressure flow. Closed faces have zero flux; open grid
@@ -667,47 +711,69 @@ export class Simulation {
   private flowPressure(): void {
     const { W, H, cells, pressure: p, pressureNext: next } = this
     next.set(p)
-    for (let cy = 0; cy < this.chunkH; cy++) for (let cx = 0; cx < this.chunkW; cx++) {
-      const chunk = cy * this.chunkW + cx
-      if (!this.active[chunk] && !this.activeNext[chunk]) continue
-      const x1 = Math.min(W, cx * CS + CS), y1 = Math.min(H, cy * CS + CS)
-      for (let y = cy * CS; y < y1; y++) for (let x = cx * CS; x < x1; x++) {
-        const i = y * W + x
-        if (!GAS[cells[i]]) { next[i] = 0; continue }
-        if (x === 0 || y === 0 || x === W - 1 || y === H - 1) { next[i] = 0; continue }
-        let flow = 0
-        if (GAS[cells[i - W]]) flow += Math.trunc((p[i - W] - p[i]) / 4)
-        if (GAS[cells[i + W]]) flow += Math.trunc((p[i + W] - p[i]) / 4)
-        if (GAS[cells[i - 1]]) flow += Math.trunc((p[i - 1] - p[i]) / 4)
-        if (GAS[cells[i + 1]]) flow += Math.trunc((p[i + 1] - p[i]) / 4)
-        const value = p[i] + flow
-        next[i] = value <= 3 ? 0 : value
-        if (next[i] > 0 || flow !== 0) this.wake(x, y)
+    for (let cy = 0; cy < this.chunkH; cy++)
+      for (let cx = 0; cx < this.chunkW; cx++) {
+        const chunk = cy * this.chunkW + cx
+        if (!this.active[chunk] && !this.activeNext[chunk]) continue
+        const x1 = Math.min(W, cx * CS + CS),
+          y1 = Math.min(H, cy * CS + CS)
+        for (let y = cy * CS; y < y1; y++)
+          for (let x = cx * CS; x < x1; x++) {
+            const i = y * W + x
+            if (!GAS[cells[i]]) {
+              next[i] = 0
+              continue
+            }
+            if (x === 0 || y === 0 || x === W - 1 || y === H - 1) {
+              next[i] = 0
+              continue
+            }
+            let flow = 0
+            if (GAS[cells[i - W]]) flow += Math.trunc((p[i - W] - p[i]) / 4)
+            if (GAS[cells[i + W]]) flow += Math.trunc((p[i + W] - p[i]) / 4)
+            if (GAS[cells[i - 1]]) flow += Math.trunc((p[i - 1] - p[i]) / 4)
+            if (GAS[cells[i + 1]]) flow += Math.trunc((p[i + 1] - p[i]) / 4)
+            const value = p[i] + flow
+            next[i] = value <= 3 ? 0 : value
+            if (next[i] > 0 || flow !== 0) this.wake(x, y)
+          }
       }
-    }
     this.pressure = next
     this.pressureNext = p
     // Rupture after all fluxes have been computed, so fracture never changes
     // the conductivity topology halfway through the symmetric pressure pass.
-    for (let cy = 0; cy < this.chunkH; cy++) for (let cx = 0; cx < this.chunkW; cx++) {
-      const chunk = cy * this.chunkW + cx
-      if (!this.active[chunk] && !this.activeNext[chunk]) continue
-      const x1 = Math.min(W, cx * CS + CS), y1 = Math.min(H, cy * CS + CS)
-      for (let y = cy * CS; y < y1; y++) for (let x = cx * CS; x < x1; x++) {
-        const i = y * W + x, m = cells[i], strength = STRENGTH[m]
-        if (strength === 0 || m === Mat.WALL) continue
-        if (this.neighborPressure(x, y) > strength) this.rupture(x, y, m)
+    for (let cy = 0; cy < this.chunkH; cy++)
+      for (let cx = 0; cx < this.chunkW; cx++) {
+        const chunk = cy * this.chunkW + cx
+        if (!this.active[chunk] && !this.activeNext[chunk]) continue
+        const x1 = Math.min(W, cx * CS + CS),
+          y1 = Math.min(H, cy * CS + CS)
+        for (let y = cy * CS; y < y1; y++)
+          for (let x = cx * CS; x < x1; x++) {
+            const i = y * W + x,
+              m = cells[i],
+              strength = STRENGTH[m]
+            if (strength === 0 || m === Mat.WALL) continue
+            if (this.neighborPressure(x, y) > strength) this.rupture(x, y, m)
+          }
       }
-    }
   }
 
   private rupture(x: number, y: number, material: number): void {
-    const i = y * this.W + x, temperature = this.heat[i]
-    const debris = material === Mat.METAL ? Mat.FILINGS : material === Mat.ICE ? Mat.WATER : Mat.SAND
+    const i = y * this.W + x,
+      temperature = this.heat[i]
+    const debris =
+      material === Mat.METAL ? Mat.FILINGS : material === Mat.ICE ? Mat.WATER : Mat.SAND
     // Throw one fragment into available air, leaving an actual vent. Fixed
     // direction order is shared across clients, and any new cell uses the PRNG.
-    for (const [dx, dy] of [[0, -1], [-1, 0], [1, 0], [0, 1]]) {
-      const nx = x + dx, ny = y + dy
+    for (const [dx, dy] of [
+      [0, -1],
+      [-1, 0],
+      [1, 0],
+      [0, 1],
+    ]) {
+      const nx = x + dx,
+        ny = y + dy
       if (this.matAt(nx, ny) !== Mat.EMPTY) continue
       this.setCell(nx, ny, debris)
       this.heat[ny * this.W + nx] = temperature
@@ -729,6 +795,14 @@ export class Simulation {
       case Mat.STONE:
       case Mat.METAL:
       case Mat.GLASS:
+        return
+      case Mat.HEATER:
+        this.heat[i] = Math.max(this.heat[i], emitTemp[Mat.HEATER])
+        this.wake(x, y)
+        return
+      case Mat.COOLER:
+        this.heat[i] = Math.min(this.heat[i], emitTemp[Mat.COOLER])
+        this.wake(x, y)
         return
       case Mat.SAND:
         if (this.phaseChange(x, y, i, meltPoint[Mat.SAND], 80, Mat.GLASS, 1)) return
@@ -866,25 +940,28 @@ export class Simulation {
 
   // ---- reactive materials ------------------------------------------------
 
-  /**
-   * Water: heat-driven phase changes, then liquid movement. Flammables/sources
-   * ignite emergently via the heat field, so water no longer special-cases its
-   * neighbors — it reacts only to its own cell temperature.
-   */
   /** Absorb/release latent heat at a phase boundary without resetting temperature.
    * Signed progress travels with the particle and persists in full snapshots. */
-  private phaseChange(x: number, y: number, i: number, boundary: number, latent: number, target: number, sign: number): boolean {
+  private phaseChange(
+    x: number,
+    y: number,
+    i: number,
+    boundary: number,
+    latent: number,
+    target: number,
+    sign: number,
+  ): boolean {
     const drive = Math.round((this.heat[i] - boundary) * TEMP_SCALE) * sign
     const stored = Math.max(0, this.phase[i] * sign)
     const progress = Math.max(0, stored + drive)
     if (progress === 0) {
-      if (stored > 0) this.heat[i] = boundary + sign * (stored + drive) / TEMP_SCALE
+      if (stored > 0) this.heat[i] = boundary + (sign * (stored + drive)) / TEMP_SCALE
       this.phase[i] = 0
       return false
     }
     this.wake(x, y)
     if (progress >= latent * TEMP_SCALE) {
-      const temperature = boundary + sign * (progress - latent * TEMP_SCALE) / TEMP_SCALE
+      const temperature = boundary + (sign * (progress - latent * TEMP_SCALE)) / TEMP_SCALE
       this.setCell(x, y, target)
       this.heat[i] = temperature
       if (target === Mat.STEAM) this.addPressure(i, 1024)
@@ -906,7 +983,10 @@ export class Simulation {
   }
 
   private updateSteam(x: number, y: number, i: number): void {
-    if (this.phaseChange(x, y, i, freezePoint[Mat.STEAM] + (this.pressure[i] >> 7), 80, Mat.WATER, -1)) return
+    if (
+      this.phaseChange(x, y, i, freezePoint[Mat.STEAM] + (this.pressure[i] >> 7), 80, Mat.WATER, -1)
+    )
+      return
     // Steam does not lose water mass to a lifespan. It condenses, or escapes
     // at an open grid edge. A sealed boiler retains its steam.
     if (y === 0 || x === 0 || x === this.W - 1) {
@@ -928,7 +1008,12 @@ export class Simulation {
 
   private updateFire(x: number, y: number, i: number): void {
     const wet = this.wetNeighbors(x, y)
-    if (this.fuel[i] === 0 || this.heat[i] < 120 || wet >= 2 || (wet === 1 && this.rng.next() < 0.7)) {
+    if (
+      this.fuel[i] === 0 ||
+      this.heat[i] < 120 ||
+      wet >= 2 ||
+      (wet === 1 && this.rng.next() < 0.7)
+    ) {
       const temperature = this.heat[i]
       this.setCell(x, y, Mat.SMOKE)
       this.heat[i] = temperature
@@ -1026,7 +1111,10 @@ export class Simulation {
     // solver only craters a water-touching cell ~60°/frame — a deep gate would
     // never be reached. Checked BEFORE re-emission so it reads the value last
     // frame's diffusion left behind (re-asserting first would pin it molten).
-    if (this.heat[i] < 400 || (coolantAdjacent && this.heat[i] < emitTemp[Mat.LAVA] - LAVA_QUENCH_DELTA)) {
+    if (
+      this.heat[i] < 400 ||
+      (coolantAdjacent && this.heat[i] < emitTemp[Mat.LAVA] - LAVA_QUENCH_DELTA)
+    ) {
       this.setCell(x, y, Mat.STONE)
       return
     }
@@ -1137,13 +1225,16 @@ export class Simulation {
    */
   private colorOf(m: number, lf: number, ex: number, h: number): number {
     if (this.showTemp) {
-      const t = this.heatColor(h), c = this.baseColor(m, lf, ex)
-      return rgba(((t & 255) * 3 + (c & 255)) >> 2,
+      const t = this.heatColor(h),
+        c = this.baseColor(m, lf, ex)
+      return rgba(
+        ((t & 255) * 3 + (c & 255)) >> 2,
         (((t >> 8) & 255) * 3 + ((c >> 8) & 255)) >> 2,
-        (((t >> 16) & 255) * 3 + ((c >> 16) & 255)) >> 2)
+        (((t >> 16) & 255) * 3 + ((c >> 16) & 255)) >> 2,
+      )
     }
     const c = this.baseColor(m, lf, ex)
-    if (m === Mat.FIRE || m === Mat.LAVA || m === Mat.LIGHTNING) return c
+    if (m === Mat.FIRE || m === Mat.LAVA || m === Mat.LIGHTNING || m === Mat.HEATER) return c
     return this.tint(c, h)
   }
 
@@ -1165,6 +1256,10 @@ export class Simulation {
 
   private baseColor(m: number, lf: number, ex: number): number {
     switch (m) {
+      case Mat.HEATER:
+        return shade(238, 106, 62, (ex % 22) - 8)
+      case Mat.COOLER:
+        return shade(84, 180, 220, (ex % 22) - 8)
       case Mat.WALL:
         return shade(120, 122, 130, (ex % 16) - 8)
       case Mat.SAND:
@@ -1239,7 +1334,7 @@ export class Simulation {
       count++
       const c = this.colorOf(m, life[i], extra[i], heat[i])
       buf32[i] = c
-      if (m === Mat.FIRE || m === Mat.LAVA || m === Mat.LIGHTNING) {
+      if (m === Mat.FIRE || m === Mat.LAVA || m === Mat.LIGHTNING || m === Mat.HEATER) {
         glow32[i] = c
         emissive++
       } else {
@@ -1284,7 +1379,10 @@ export class Simulation {
     darkness: number,
   ): void {
     // Temperature colors must remain legible regardless of scene lighting.
-    if (this.showTemp) { glow = false; light = false }
+    if (this.showTemp) {
+      glow = false
+      light = false
+    }
     this.writeImage()
     this.offCtx.putImageData(this.imageData, 0, 0)
     ctx.imageSmoothingEnabled = false

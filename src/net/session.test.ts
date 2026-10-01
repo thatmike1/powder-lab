@@ -298,7 +298,10 @@ describe('NetSession', () => {
   })
 
   it('thermal strokes wait for broadcast, work while paused, and replay on resync', () => {
-    const relay = new FakeRelay(), a = makePeer(relay), b = makePeer(relay), peers = [a, b]
+    const relay = new FakeRelay(),
+      a = makePeer(relay),
+      b = makePeer(relay),
+      peers = [a, b]
     a.session.sendInput({ type: 'running', on: false })
     run(relay, peers, 200)
     const before = a.sim().serializeState()
@@ -317,12 +320,14 @@ describe('NetSession', () => {
   })
 
   it('a late joiner adopts live thermal pressure and resumes exactly', () => {
-    const relay = new FakeRelay(), a = makePeer(relay)
-    for (let y = 10; y < 20; y++) for (let x = 10; x < 20; x++) {
-      a.sim().paint(x, y, 0, x === 10 || x === 19 || y === 10 || y === 19 ? Mat.WALL : Mat.STEAM)
-    }
+    const relay = new FakeRelay(),
+      a = makePeer(relay)
+    for (let y = 10; y < 20; y++)
+      for (let x = 10; x < 20; x++) {
+        a.sim().paint(x, y, 0, x === 10 || x === 19 || y === 10 || y === 19 ? Mat.WALL : Mat.STEAM)
+      }
     run(relay, [a], 40)
-    expect(a.sim().pressure.some(p => p > 0)).toBe(true)
+    expect(a.sim().pressure.some((p) => p > 0)).toBe(true)
     relay.joinedState = a.session.serializeEnvelope()
     const b = makePeer(relay)
     expect(b.sim().serializeState()).toEqual(a.sim().serializeState())
@@ -332,8 +337,10 @@ describe('NetSession', () => {
   })
 
   it('disconnects with an actionable error instead of running an incompatible snapshot', () => {
-    const relay = new FakeRelay(), a = makePeer(relay)
-    const bytes = a.sim().serializeState(); bytes[2] = 1
+    const relay = new FakeRelay(),
+      a = makePeer(relay)
+    const bytes = a.sim().serializeState()
+    bytes[2] = 1
     const bad = encodeStateEnvelope(a.session.roomTick, true, bytes)
     relay.pushSetState('p0', bad, 'p0')
     run(relay, [a], 500)

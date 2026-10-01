@@ -11,7 +11,8 @@ describe('latent heat and phase snapshots', () => {
   }
 
   it('absorbs boiling heat at the boundary instead of flashing on a single crossing', () => {
-    const s = chamber(), i = 6 * 32 + 6
+    const s = chamber(),
+      i = 6 * 32 + 6
     s.paint(6, 6, 0, Mat.WATER)
     s.heat[i] = 110
     s.step()
@@ -26,7 +27,8 @@ describe('latent heat and phase snapshots', () => {
   })
 
   it('round-trips a partially melting cell and resumes exactly', () => {
-    const a = chamber(), i = 6 * 32 + 6
+    const a = chamber(),
+      i = 6 * 32 + 6
     a.paint(6, 6, 0, Mat.ICE)
     a.heat[i] = 15
     a.step()
@@ -34,15 +36,20 @@ describe('latent heat and phase snapshots', () => {
     const b = new Simulation(32, 16, 999)
     expect(b.loadState(a.serializeState())).toBe(true)
     expect(b.serializeState()).toEqual(a.serializeState())
-    a.step(200); b.step(200)
+    a.step(200)
+    b.step(200)
     expect(b.serializeState()).toEqual(a.serializeState())
     expect(a.cells[i]).toBe(Mat.WATER)
   })
 
   it('keeps sealed hot steam instead of deleting it by lifespan', () => {
-    const s = chamber(), i = 6 * 32 + 6
+    const s = chamber(),
+      i = 6 * 32 + 6
     s.paint(6, 6, 0, Mat.STEAM)
-    for (let tick = 0; tick < 500; tick++) { s.heat[i] = 120; s.step() }
+    for (let tick = 0; tick < 500; tick++) {
+      s.heat[i] = 120
+      s.step()
+    }
     expect(s.cells[i]).toBe(Mat.STEAM)
   })
 })

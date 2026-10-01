@@ -27,8 +27,10 @@ thing as a local-only edit inside a room.
 - A room has a creation timestamp `t0` (server wall clock, ms).
 - `serverTick = floor((serverNow - t0) / TICK_MS)`.
 - The server is authoritative for tick assignment. Clients estimate the server
-  clock offset from the handshake and from `serverTime` echoed on every message,
-  smoothed; they never assign apply-ticks themselves.
+  clock offset from the handshake and from `serverTime` echoed on every message.
+  The largest signed `serverTime - localNow` sample over the last 32 frames
+  selects the fastest packet; delayed frames cannot drag the estimate behind.
+  Clients never assign apply-ticks themselves.
 - `INPUT_DELAY = 10` ticks (~133 ms). The server assigns
   `applyTick = serverTick + INPUT_DELAY` to every input it accepts and
   broadcasts it to all peers **including the sender**. A client never applies
@@ -176,11 +178,14 @@ undo, spectator mode, and any deployment concern beyond running locally.
 
 ## Thermodynamics extension (feat/thermo)
 
-The tick clock and opaque relay protocol are unchanged. `paint.mat` also names
+The opaque relay protocol and tick assignment are unchanged. The clock offset
+filter now selects the fastest packet correctly, including delayed full-state
+frames. `paint.mat` also names
 Heat (20) and Cool (21) brushes; `Simulation.paint` intercepts them to change
 temperature instead of creating cells. They use the existing point/segment
 batcher, ordered broadcasts and retained replay log. There is no local echo.
-Heat view and its hover readout are cosmetic per-client settings.
+Heat view and its hover readout are cosmetic per-client settings. Heater (22)
+and Chiller (23) are stationary materials, painted through the same event path.
 
 Full simulation state **version 4** supersedes the field description above:
 `heat` stores exact Q4 degrees; `phase` is signed Int16 latent energy, `fuel` is

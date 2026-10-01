@@ -30,6 +30,8 @@ const THUMB: Record<number, [number, number, number]> = {
   [Mat.METAL]: [168, 170, 182],
   [Mat.FILINGS]: [120, 122, 132],
   [Mat.GLASS]: [196, 222, 234],
+  [Mat.HEATER]: [238, 106, 62],
+  [Mat.COOLER]: [84, 180, 220],
 }
 
 /** rasterize a preset's grid to a data-URL once, so cards are plain <img>s. */
