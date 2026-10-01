@@ -84,6 +84,8 @@ describe('deterministic simulation', () => {
     s.paint(24, 30, 6, Mat.STONE)
     s.paint(24, 20, 4, Mat.LAVA)
     s.paint(10, 10, 5, Mat.WATER)
+    s.paint(40, 25, 3, Mat.WOOD)
+    s.paint(40, 25, 0, Mat.FIRE)
     for (let k = 0; k < 200; k++) {
       s.step(1)
       for (const m of seenMaterials(s)) everSeen.add(m)

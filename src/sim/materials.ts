@@ -85,7 +85,7 @@ export const emitTemp = new Float32Array(MAT_COUNT)
 // melt sand to glass and boil water in bulk, while its stone-crust gate is a
 // RELATIVE margin below this value (LAVA_QUENCH_DELTA in Simulation), so the two
 // move together — raising emitTemp[LAVA] would raise the gate in lockstep.
-emitTemp[Mat.FIRE] = 1200
+emitTemp[Mat.FIRE] = 1500
 emitTemp[Mat.LAVA] = 700
 // cold source. Set well below ambient because the Newtonian COOL term in
 // diffuse() pulls every cell back toward +20 each frame, fighting the cold; at

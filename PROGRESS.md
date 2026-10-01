@@ -40,7 +40,7 @@ significant; report distributions and the same harness again at unit 7.
 ## Plan and status
 
 0. **Complete:** assess, baseline tests/build and benchmark; commit this plan.
-1. **Pending:** fixed-point temperature operations, neighbour conduction, ambient
+1. **Complete:** fixed-point temperature operations, neighbour conduction, ambient
    cooling, material heat transport, correct thermal chunk waking.
 2. **Pending:** temperature-led ice/water/steam/glass transitions with latent heat;
    keep thermal state across transitions and serialize new phase progress.
@@ -76,4 +76,9 @@ remote exists (origin is configured).
 
 ## Next
 
-Implement unit 1. Baseline assessment/tests/build/benchmark are complete.
+Implement unit 2. Unit 1: Q4 temperatures and integer face flux; conduct before
+movement, advect heat with particles, precomputed harmonic conductivity, cheaper
+chunk waking. Minimum one-quantum ambient cooling prevents an integer tail from
+keeping chunks awake forever. Retuned fire emission/wood ignition for the changed
+transport. Added border/transport/wake regressions. 143 tests pass in 17 files;
+type-check and production build pass. No new persistent state in unit 1.

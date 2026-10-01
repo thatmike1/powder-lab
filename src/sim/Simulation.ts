@@ -1,6 +1,5 @@
 import {
   boilPoint,
-  CONDUCT,
   density,
   emitTemp,
   freezePoint,
@@ -8,28 +7,20 @@ import {
   isDissolvable,
   isMovable,
   Mat,
+  MAT_COUNT,
   meltPoint,
 } from './materials'
 import { DEFAULT_SEED, Rng } from './rng'
 import { encodeRLE } from './scene'
 import { decodeState, encodeState } from './state'
+import { AMBIENT, FACE, TEMP_SCALE } from './thermal'
 
 const CS = 16 // chunk size (cells per side)
 
-// ---- heat field tuning ---------------------------------------------------
-const AMBIENT = 20 // resting temperature everything relaxes toward
-const DIFFUSE = 0.13 // fraction of the (conductivity-weighted) neighbor gradient
-// that flows per frame. Stable because the harmonic-mean face weight caps at 1,
-// so the worst-case stencil is 1 - 4*DIFFUSE = 0.48 (convex). Lower than the old
-// 0.2 to shorten the decay length (~2.5 cells) so a hot pocket's halo stays tight.
-const COOL = 0.02 // Newtonian cooling: each cell relaxes COOL toward AMBIENT every
-// frame regardless of neighbors. This is the interior heat sink that lets a lone
-// hot pocket actually decay to ambient instead of lingering forever.
-const EPS = 0.5 // heat delta below which a cell is "settled" and stops waking
-// Cooling-only cells drift toward AMBIENT by COOL*(h-AMBIENT); that delta drops
-// under EPS while still ~25° from ambient, which would freeze a pocket mid-decay
-// once its chunk sleeps. So the cooling tail uses its own (wider) band:
-const AMBIENT_BAND = 2 // keep a cell's chunk awake while |h - AMBIENT| > this
+// Temperatures are Q4 degrees. Each face transfers 1/8 of its integer
+// conductivity-weighted gradient; four faces form a stable convex stencil.
+const AMBIENT_Q = AMBIENT * TEMP_SCALE
+const AMBIENT_BAND_Q = 2 * TEMP_SCALE
 
 // Lava crusts when a coolant-adjacent cell cools below emitTemp[LAVA] minus this
 // margin. The slow new solver drops a water-touching lava cell only ~60°/frame,
@@ -74,7 +65,7 @@ export class Simulation {
   life: Uint8Array // generic per-cell counter (fire/smoke/steam lifespan)
   extra: Uint8Array // per-cell random seed for color dithering / flicker
   stamp: Int32Array // last frame a cell was touched (prevents double-moves)
-  heat: Float32Array // temperature per cell; diffuses each frame (Eulerian)
+  heat: Float32Array // temperature per cell in exact Q4 degrees; moves with particles
   private heatNext: Float32Array // double buffer for Jacobi-style diffusion
 
   // the single seeded random stream every probabilistic rule draws from. its
@@ -159,14 +150,13 @@ export class Simulation {
 
   /** Wake the chunk of (x,y) and any neighbor chunk a 3x3 neighbor lands in. */
   private wake(x: number, y: number): void {
-    for (let dy = -1; dy <= 1; dy++) {
-      const ny = y + dy
-      if (ny < 0 || ny >= this.H) continue
-      for (let dx = -1; dx <= 1; dx++) {
-        const nx = x + dx
-        if (nx < 0 || nx >= this.W) continue
-        this.activeNext[((ny / CS) | 0) * this.chunkW + ((nx / CS) | 0)] = 1
-      }
+    const cx0 = Math.max(0, (x - 1) >> 4)
+    const cx1 = Math.min(this.chunkW - 1, (x + 1) >> 4)
+    const cy0 = Math.max(0, (y - 1) >> 4)
+    const cy1 = Math.min(this.chunkH - 1, (y + 1) >> 4)
+    for (let cy = cy0; cy <= cy1; cy++) {
+      const row = cy * this.chunkW
+      for (let cx = cx0; cx <= cx1; cx++) this.activeNext[row + cx] = 1
     }
   }
 
@@ -195,12 +185,7 @@ export class Simulation {
     this.wake(x, y)
   }
 
-  /**
-   * Swap two cells (material + life + seed) and mark both touched + awake.
-   * `heat` is deliberately NOT swapped: temperature is a property of *space*
-   * (Eulerian field), not of the particle. A moving source re-asserts its
-   * emission temperature at its new cell next frame, so this self-corrects.
-   */
+  /** Swap particle state, including temperature, and wake both neighborhoods. */
   private swap(x1: number, y1: number, x2: number, y2: number): void {
     const i1 = y1 * this.W + x1
     const i2 = y2 * this.W + x2
@@ -213,6 +198,9 @@ export class Simulation {
     const e = this.extra[i1]
     this.extra[i1] = this.extra[i2]
     this.extra[i2] = e
+    const h = this.heat[i1]
+    this.heat[i1] = this.heat[i2]
+    this.heat[i2] = h
     this.stamp[i1] = this.frame
     this.stamp[i2] = this.frame
     this.wake(x1, y1)
@@ -524,6 +512,10 @@ export class Simulation {
     this.activeNext = tmp
     this.activeNext.fill(0)
 
+    // Conduct before the particle walk so heat reaches contact surfaces before
+    // a flame rises or coolant displaces it. Movement then advects the field.
+    this.diffuse()
+
     const { W, H, chunkW, chunkH } = this
     const dir = this.frame & 1 ? 1 : -1 // alternate horizontal scan to kill bias
 
@@ -541,9 +533,6 @@ export class Simulation {
       }
     }
 
-    // Heat diffuses AFTER the material walk: sources deposit their temperature
-    // for this frame (emission in updateFire/updateLava/ICE), then it spreads.
-    this.diffuse()
   }
 
   /**
@@ -568,49 +557,20 @@ export class Simulation {
         for (let y = y0; y < y1; y++) {
           for (let x = x0; x < x1; x++) {
             const i = y * W + x
-            const h = heat[i]
-            const ci = CONDUCT[cells[i]]
-            // Per face, heat flows at the harmonic mean of the two cells'
-            // conductivities (series resistance: the duller side throttles the
-            // boundary). An OOB neighbor reads as AMBIENT air (heat=AMBIENT,
-            // cond=1). A cond-0 WALL forces kFace=0 on every touching face, so it
-            // neither conducts nor leaks — thermally inert with no special case.
-            // unrolled 4-neighbor face flow (no per-cell array allocation).
+            const q = Math.round(heat[i] * TEMP_SCALE)
+            const face = cells[i] * MAT_COUNT
             let flow = 0
-            {
-              const hN = y > 0 ? heat[i - W] : AMBIENT
-              const cn = y > 0 ? CONDUCT[cells[i - W]] : 1
-              flow += ((2 * ci * cn) / (ci + cn + 1e-6)) * (hN - h)
-            }
-            {
-              const hN = y < H - 1 ? heat[i + W] : AMBIENT
-              const cn = y < H - 1 ? CONDUCT[cells[i + W]] : 1
-              flow += ((2 * ci * cn) / (ci + cn + 1e-6)) * (hN - h)
-            }
-            {
-              const hN = x > 0 ? heat[i - 1] : AMBIENT
-              const cn = x > 0 ? CONDUCT[cells[i - 1]] : 1
-              flow += ((2 * ci * cn) / (ci + cn + 1e-6)) * (hN - h)
-            }
-            {
-              const hN = x < W - 1 ? heat[i + 1] : AMBIENT
-              const cn = x < W - 1 ? CONDUCT[cells[i + 1]] : 1
-              flow += ((2 * ci * cn) / (ci + cn + 1e-6)) * (hN - h)
-            }
-            let next = h + DIFFUSE * flow
-            // Newtonian cooling toward ambient: the interior heat sink that lets
-            // an isolated hot pocket decay instead of lingering at the boundary.
-            next += COOL * (AMBIENT - next)
-            // Stay awake while heat is still moving OR while meaningfully off
-            // ambient — the latter decouples the cooling tail from EPS so a slow
-            // exponential decay doesn't sleep at ~45° absolute. Once a cell is
-            // both settled AND within the ambient band, snap it exactly to
-            // ambient as it goes to sleep so no residual warmth is frozen in.
-            const moving = next - h > EPS || h - next > EPS
-            const offAmbient = next - AMBIENT > AMBIENT_BAND || AMBIENT - next > AMBIENT_BAND
-            if (moving || offAmbient) this.wake(x, y)
-            else next = AMBIENT
-            heatNext[i] = next
+            // Pair flux is antisymmetric: absent ambient cooling, equal-sized
+            // cells exchange the same integer heat in opposite directions.
+            if (y > 0) flow += Math.trunc(((heat[i - W] * TEMP_SCALE - q) * FACE[face + cells[i - W]]) / 8192)
+            if (y < H - 1) flow += Math.trunc(((heat[i + W] * TEMP_SCALE - q) * FACE[face + cells[i + W]]) / 8192)
+            if (x > 0) flow += Math.trunc(((heat[i - 1] * TEMP_SCALE - q) * FACE[face + cells[i - 1]]) / 8192)
+            if (x < W - 1) flow += Math.trunc(((heat[i + 1] * TEMP_SCALE - q) * FACE[face + cells[i + 1]]) / 8192)
+            let next = q + flow
+            next += Math.sign(AMBIENT_Q - next) * Math.ceil(Math.abs(AMBIENT_Q - next) / 50)
+            if (Math.abs(next - AMBIENT_Q) > AMBIENT_BAND_Q || Math.abs(next - q) > 8) this.wake(x, y)
+            else next = AMBIENT_Q
+            heatNext[i] = next / TEMP_SCALE
           }
         }
       }
@@ -685,7 +645,7 @@ export class Simulation {
         this.updateSteam(x, y, i)
         return
       case Mat.WOOD:
-        if (this.heat[i] >= ignitionPoint[Mat.WOOD] && this.rng.next() < 0.1)
+        if (this.heat[i] >= ignitionPoint[Mat.WOOD] && this.rng.next() < 0.3)
           this.setCell(x, y, Mat.FIRE)
         return
       case Mat.PLANT:
@@ -959,13 +919,7 @@ export class Simulation {
     }
   }
 
-  /**
-   * Move lava and carry its molten temperature to the destination. Heat is an
-   * Eulerian field (swap leaves it in place), so a cell lava just flowed into
-   * holds the *old* (cold) temperature — without this it would read below
-   * freezePoint next frame and petrify mid-flow. Seeding the destination keeps
-   * a flowing stream liquid; it only crusts once it stops and stays exposed.
-   */
+  /** Move lava, carrying its heat; maintain the toy's molten reservoir. */
   private moveLava(x: number, y: number, tx: number, ty: number): boolean {
     if (!this.tryMove(x, y, tx, ty, Mat.LAVA)) return false
     const ti = ty * this.W + tx
