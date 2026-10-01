@@ -66,6 +66,7 @@ export class Simulation {
   extra: Uint8Array // per-cell random seed for color dithering / flicker
   stamp: Int32Array // last frame a cell was touched (prevents double-moves)
   heat: Float32Array // temperature per cell in exact Q4 degrees; moves with particles
+  phase: Int16Array // signed Q4 latent energy; positive heating, negative cooling
   private heatNext: Float32Array // double buffer for Jacobi-style diffusion
 
   // the single seeded random stream every probabilistic rule draws from. its
@@ -107,6 +108,7 @@ export class Simulation {
     this.extra = new Uint8Array(n)
     this.stamp = new Int32Array(n).fill(-1)
     this.heat = new Float32Array(n).fill(AMBIENT)
+    this.phase = new Int16Array(n)
     this.heatNext = new Float32Array(n)
     for (let i = 0; i < n; i++) this.extra[i] = (this.rng.next() * 256) | 0
 
@@ -178,6 +180,7 @@ export class Simulation {
   private setCell(x: number, y: number, mat: number): void {
     const i = y * this.W + x
     this.cells[i] = mat
+    this.phase[i] = 0
     this.extra[i] = (this.rng.next() * 256) | 0
     this.assignSpawnLife(i, mat)
     this.assignSpawnHeat(i, mat)
@@ -198,6 +201,9 @@ export class Simulation {
     const e = this.extra[i1]
     this.extra[i1] = this.extra[i2]
     this.extra[i2] = e
+    const ph = this.phase[i1]
+    this.phase[i1] = this.phase[i2]
+    this.phase[i2] = ph
     const h = this.heat[i1]
     this.heat[i1] = this.heat[i2]
     this.heat[i2] = h
@@ -374,6 +380,7 @@ export class Simulation {
   clear(): void {
     this.cells.fill(Mat.EMPTY)
     this.life.fill(0)
+    this.phase.fill(0)
     this.heat.fill(AMBIENT)
     this.activeNext.fill(1)
   }
@@ -395,6 +402,7 @@ export class Simulation {
     if (cells.length !== n) return false
     this.cells.set(cells)
     this.life.fill(0)
+    this.phase.fill(0)
     this.heat.fill(AMBIENT)
     for (let i = 0; i < n; i++) {
       this.extra[i] = (this.rng.next() * 256) | 0
@@ -438,6 +446,7 @@ export class Simulation {
       activeNext: this.activeNext,
       stamp: this.stamp,
       heat: this.heat,
+      phase: this.phase,
     })
   }
 
@@ -462,6 +471,7 @@ export class Simulation {
     this.extra.set(st.extra)
     this.stamp.set(st.stamp)
     this.heat.set(st.heat)
+    this.phase.set(st.phase)
     this.active.set(st.active)
     this.activeNext.set(st.activeNext)
     this.rng.setState(st.rngState)
@@ -492,6 +502,7 @@ export class Simulation {
       mix(q >> 16)
       mix(q >> 24)
     }
+    for (const p of this.phase) { mix(p); mix(p >> 8) }
     return h >>> 0
   }
 
@@ -593,12 +604,7 @@ export class Simulation {
       case Mat.GLASS:
         return
       case Mat.SAND:
-        // sustained lava heat fuses sand into glass; probabilistic so a pool
-        // forms a glass crust gradually rather than flashing the whole bed.
-        if (this.heat[i] >= meltPoint[Mat.SAND] && this.rng.next() < 0.05) {
-          this.setCell(x, y, Mat.GLASS)
-          return
-        }
+        if (this.phaseChange(x, y, i, meltPoint[Mat.SAND], 80, Mat.GLASS, 1)) return
         this.updatePowder(x, y, m)
         return
       case Mat.FILINGS:
@@ -717,6 +723,11 @@ export class Simulation {
     }
     this.life[i]--
     this.wake(x, y) // stay awake while alive (so it keeps fading even if stuck)
+    this.moveGas(x, y, i)
+  }
+
+  private moveGas(x: number, y: number, i: number): void {
+    this.wake(x, y)
     const m = this.cells[i]
     const first = this.rng.next() < 0.5 ? -1 : 1
     if (this.tryRise(x, y, x, y - 1, m)) return
@@ -733,39 +744,48 @@ export class Simulation {
    * ignite emergently via the heat field, so water no longer special-cases its
    * neighbors — it reacts only to its own cell temperature.
    */
-  private updateWater(x: number, y: number, i: number, m: number): void {
-    if (this.heat[i] >= boilPoint[Mat.WATER] && this.rng.next() < 0.4) {
-      this.setCell(x, y, Mat.STEAM) // boil -> steam (carries the hot temp up)
-      return
+  /** Absorb/release latent heat at a phase boundary without resetting temperature.
+   * Signed progress travels with the particle and persists in full snapshots. */
+  private phaseChange(x: number, y: number, i: number, boundary: number, latent: number, target: number, sign: number): boolean {
+    const drive = Math.round((this.heat[i] - boundary) * TEMP_SCALE) * sign
+    const stored = Math.max(0, this.phase[i] * sign)
+    const progress = Math.max(0, stored + drive)
+    if (progress === 0) {
+      if (stored > 0) this.heat[i] = boundary + sign * (stored + drive) / TEMP_SCALE
+      this.phase[i] = 0
+      return false
     }
-    if (this.heat[i] <= freezePoint[Mat.WATER]) {
-      // cold-driven freeze, deterministic. No stochastic gate is needed for a
-      // gradual front: the rewritten heat field is LOCAL (conductivity throttle
-      // + Newtonian cooling), so only the cold frontier sits below 0 at any
-      // instant. The freeze front therefore advances one shell at a time as the
-      // cold diffuses outward — a whole pool can't dip below 0 at once and
-      // flash-freeze. (A probabilistic gate here instead loses the race against
-      // unsupported water draining away before it can freeze — see the
-      // ice-grows-by-freezing guardrail.)
-      this.setCell(x, y, Mat.ICE)
-      return
+    this.wake(x, y)
+    if (progress >= latent * TEMP_SCALE) {
+      const temperature = boundary + sign * (progress - latent * TEMP_SCALE) / TEMP_SCALE
+      this.setCell(x, y, target)
+      this.heat[i] = temperature
+      return true
+    }
+    this.phase[i] = progress * sign
+    this.heat[i] = boundary
+    return false
+  }
+
+  private updateWater(x: number, y: number, i: number, m: number): void {
+    if (this.heat[i] >= boilPoint[Mat.WATER] || this.phase[i] > 0) {
+      if (this.phaseChange(x, y, i, boilPoint[Mat.WATER], 80, Mat.STEAM, 1)) return
+    } else if (this.heat[i] <= freezePoint[Mat.WATER] || this.phase[i] < 0) {
+      if (this.phaseChange(x, y, i, freezePoint[Mat.WATER], 40, Mat.ICE, -1)) return
     }
     this.updateLiquid(x, y, m)
   }
 
-  /**
-   * Steam: rarely condenses back to water once cooled, otherwise rises & fades.
-   * Condensation is intentionally a low-probability event: making it certain
-   * turns a plume into a closed boil->rise->condense->rain->boil convection loop
-   * (the "breathing cloud"). At ~2%/frame most steam dissipates via its lifespan
-   * instead, so only a little water drizzles back and the loop never sustains.
-   */
   private updateSteam(x: number, y: number, i: number): void {
-    if (this.heat[i] <= freezePoint[Mat.STEAM] && this.rng.next() < 0.02) {
-      this.setCell(x, y, Mat.WATER) // condense — occasional water-cycle close
+    if (this.phaseChange(x, y, i, freezePoint[Mat.STEAM], 80, Mat.WATER, -1)) return
+    // Steam does not lose water mass to a lifespan. It condenses, or escapes
+    // at an open grid edge. A sealed boiler retains its steam.
+    if (y === 0 || x === 0 || x === this.W - 1) {
+      this.setCell(x, y, Mat.EMPTY)
       return
     }
-    this.updateGas(x, y, i) // rises and fades by lifespan in updateGas
+    this.life[i] = 250
+    this.moveGas(x, y, i)
   }
 
   private updateFire(x: number, y: number, i: number): void {
@@ -976,21 +996,7 @@ export class Simulation {
 
   private updateIce(x: number, y: number): void {
     const i = y * this.W + x
-    // Melt -> water. CHECKED BEFORE re-chilling, against last frame's diffused
-    // value (mirrors lava): re-asserting the cold emission first would pin the
-    // cell below meltPoint forever. Ice in ambient (20 < meltPoint 40) self-
-    // cools and stays frozen; a hot neighbor (fire/lava) overwhelms it.
-    // melt probability is high so ice surrounded by fire reliably thaws within
-    // the short window the new (cooling) heat field leaves before the flame
-    // rises away — the lingering heat that used to guarantee it is gone.
-    if (this.heat[i] >= meltPoint[Mat.ICE] && this.rng.next() < 0.5) {
-      this.setCell(x, y, Mat.WATER)
-      return
-    }
-    // re-assert the cold emission so ice keeps chilling neighbors via diffusion;
-    // this is what drives the emergent cold freezing of adjacent water.
-    if (this.heat[i] > emitTemp[Mat.ICE]) this.heat[i] = emitTemp[Mat.ICE]
-    this.wake(x, y)
+    this.phaseChange(x, y, i, meltPoint[Mat.ICE], 40, Mat.WATER, 1)
   }
 
   private explode(x: number, y: number): void {

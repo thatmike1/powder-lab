@@ -42,7 +42,7 @@ significant; report distributions and the same harness again at unit 7.
 0. **Complete:** assess, baseline tests/build and benchmark; commit this plan.
 1. **Complete:** fixed-point temperature operations, neighbour conduction, ambient
    cooling, material heat transport, correct thermal chunk waking.
-2. **Pending:** temperature-led ice/water/steam/glass transitions with latent heat;
+2. **Complete:** temperature-led ice/water/steam/glass transitions with latent heat;
    keep thermal state across transitions and serialize new phase progress.
 3. **Pending:** temperature ignition, finite fuel, smoke and heat, quenching;
    serialize fuel and prevent counter underflow.
@@ -76,9 +76,19 @@ remote exists (origin is configured).
 
 ## Next
 
-Implement unit 2. Unit 1: Q4 temperatures and integer face flux; conduct before
+Implement unit 3. Unit 1: Q4 temperatures and integer face flux; conduct before
 movement, advect heat with particles, precomputed harmonic conductivity, cheaper
 chunk waking. Minimum one-quantum ambient cooling prevents an integer tail from
 keeping chunks awake forever. Retuned fire emission/wood ignition for the changed
 transport. Added border/transport/wake regressions. 143 tests pass in 17 files;
 type-check and production build pass. No new persistent state in unit 1.
+
+Unit 2: temperature-led phase transitions now absorb/release signed Q4 latent
+energy. The phase buffer is serialized in state v2 and covered by checksums.
+Ice is finite cold matter and melts at 0; water freezes at -2, boils at 100;
+steam condenses at 90, preserves water mass and escapes only at open edges.
+Sand fuses at the sandbox's scaled 300-degree gate. Reactions preserve remaining
+temperature instead of re-seeding the target material. Tests intentionally
+replace old infinite-ice/no-condensation assumptions. 146 tests pass in 18 files;
+type-check and production build pass. Added partial-transition snapshot and
+sealed-steam lifetime checks.

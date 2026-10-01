@@ -124,11 +124,14 @@ describe('heat field — water cycle', () => {
 })
 
 describe('heat field — ice (melt & freeze)', () => {
-  it('keeps ice frozen at rest (ambient 20 < meltPoint 40)', () => {
+  it('cold ice persists briefly, then absorbs ambient heat and melts', () => {
     const s = fresh()
     for (let x = 18; x < 23; x++) for (let y = 14; y < 17; y++) s.paint(x, y, 0, Mat.ICE)
-    for (let i = 0; i < 200; i++) s.step()
-    expect(countMat(s, Mat.ICE)).toBeGreaterThanOrEqual(14)
+    s.step(5)
+    expect(countMat(s, Mat.ICE)).toBe(15)
+    s.step(200)
+    expect(countMat(s, Mat.ICE)).toBe(0)
+    expect(countMat(s, Mat.WATER)).toBe(15)
   })
 
   it('melts ice to water when surrounded by fire', () => {
@@ -140,13 +143,21 @@ describe('heat field — ice (melt & freeze)', () => {
     expect(stepUntil(s, 300, () => s.cells[idx(20, 15)] === Mat.WATER)).toBe(true)
   })
 
-  it('grows by cold-freezing nearby water', () => {
+  it('freezes water once enough heat is removed, without spawning infinite cold', () => {
     const s = fresh()
-    for (let x = 10; x < 30; x++) for (let y = 18; y < 25; y++) s.paint(x, y, 0, Mat.WATER)
-    for (let x = 19; x < 21; x++) for (let y = 20; y < 22; y++) s.paint(x, y, 0, Mat.ICE)
-    const start = countMat(s, Mat.ICE)
-    for (let i = 0; i < 600; i++) s.step()
-    expect(countMat(s, Mat.ICE)).toBeGreaterThan(start)
+    for (let x = 19; x < 21; x++) {
+      s.paint(x, 28, 0, Mat.WATER)
+      s.heat[idx(x, 28)] = -100
+    }
+    s.step()
+    expect(countMat(s, Mat.ICE)).toBe(2)
+    // A phase change preserves its remaining temperature, rather than
+    // re-seeding the new ice at the painted ice's -40 degree temperature.
+    expect(s.heat[idx(19, 28)]).toBeGreaterThan(-40)
+    expect(s.heat[idx(19, 28)]).toBeLessThan(0)
+    s.step(300)
+    expect(countMat(s, Mat.ICE)).toBe(0)
+    expect(countMat(s, Mat.WATER)).toBe(2)
   })
 })
 

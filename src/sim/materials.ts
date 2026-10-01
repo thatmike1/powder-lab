@@ -70,65 +70,32 @@ CONDUCT[Mat.METAL] = 0.9
 CONDUCT[Mat.FILINGS] = 0.9
 // EMPTY / SMOKE / STEAM / LIGHTNING keep the 1.0 default.
 
-// ---- thermal threshold tables -------------------------------------------
-// Public Float32Arrays indexed directly in the hot loop (same style as
-// `density`), NOT the private+accessor style of isMovable/isDissolvable —
-// these are read per-cell every frame, so we want a bare typed-array load.
-// Units are arbitrary "degrees"; AMBIENT (in Simulation.ts) is 20.
-
-// temperature each material clamps its own cell to every frame (heat sources
-// and sinks). FIRE/LAVA are hot sources; ICE is a cold source below AMBIENT.
+// Thermal tables in accelerated sandbox degrees. Water uses familiar 0/100
+// boundaries; the sand fusion gate is scaled for visible glass-making in lava.
+// Only fire, lava and lightning continuously emit. Ice and steam are seeded at
+// spawn temperature and then exchange a finite amount of heat.
 export const emitTemp = new Float32Array(MAT_COUNT)
-// FIRE runs very hot so that even under the conductivity-throttled, actively
-// cooling heat field a flammable touched by a single flame still climbs past its
-// ignition point before the flame moves on. LAVA stays at 700: hot enough to
-// melt sand to glass and boil water in bulk, while its stone-crust gate is a
-// RELATIVE margin below this value (LAVA_QUENCH_DELTA in Simulation), so the two
-// move together — raising emitTemp[LAVA] would raise the gate in lockstep.
 emitTemp[Mat.FIRE] = 1500
-emitTemp[Mat.LAVA] = 700
-// cold source. Set well below ambient because the Newtonian COOL term in
-// diffuse() pulls every cell back toward +20 each frame, fighting the cold; at
-// -100 a water cell with a single ice neighbor still settles a degree or two
-// below 0 and freezes. A shallower value lets COOL win and ice stops growing.
-emitTemp[Mat.ICE] = -100
-// LIGHTNING runs hotter than fire: a bolt deposits this along its whole path,
-// so the strike point ignites wood (220), boils water (100) and melts ice (40)
-// instantly via the heat field. Re-asserted each frame of its short life so the
-// heat lingers long enough for the probabilistic ignitions to fire.
-emitTemp[Mat.LIGHTNING] = 1400
+emitTemp[Mat.LAVA] = 1100
+emitTemp[Mat.ICE] = -40
+emitTemp[Mat.STEAM] = 120
+emitTemp[Mat.SMOKE] = 80
+emitTemp[Mat.LIGHTNING] = 1800
 
-// flammables -> FIRE when heat >= this. All sit under FIRE's 315 single-contact
-// ceiling so a lone flame still spreads; ordered so wood is the most stubborn.
 export const ignitionPoint = new Float32Array(MAT_COUNT)
-ignitionPoint[Mat.GUNPOWDER] = 120 // sensitive
+ignitionPoint[Mat.GUNPOWDER] = 120
 ignitionPoint[Mat.OIL] = 150
 ignitionPoint[Mat.PLANT] = 170
 ignitionPoint[Mat.WOOD] = 220
 
-// solid -> liquid when heat >= this (must be > AMBIENT so ice persists at rest).
 export const meltPoint = new Float32Array(MAT_COUNT)
-meltPoint[Mat.ICE] = 40
-// SAND -> GLASS under sustained lava heat. Tuned for the cooled field: a sand
-// cell under a single lava neighbor only reaches ~198, under a pool ~340, so a
-// 300 gate may never form glass — 220 forms it under a real pool while leaving a
-// lone hot speck inert. (Gated by the glass test in the tuning loop.)
-meltPoint[Mat.SAND] = 220
-
-// liquid -> gas when heat >= this.
+meltPoint[Mat.ICE] = 0
+meltPoint[Mat.SAND] = 300
 export const boilPoint = new Float32Array(MAT_COUNT)
 boilPoint[Mat.WATER] = 100
-
-// cooling transitions when heat <= this (the target material lives in the
-// update() switch). default 0 means "no transition" for that material.
 export const freezePoint = new Float32Array(MAT_COUNT)
-freezePoint[Mat.WATER] = 0 // -> ICE
-// NOTE: lava's crust gate is NOT a freezePoint — it lives in Simulation as a
-// relative margin below the emission temperature (LAVA_QUENCH_DELTA), gated on
-// real coolant contact, so airborne lava stays molten regardless of temperature.
-// -> WATER (condense). Sub-ambient so steam in plain 20° air never reaches it
-// and dissipates by lifespan instead of mass-condensing back to rain.
-freezePoint[Mat.STEAM] = 12
+freezePoint[Mat.WATER] = -2 // small hysteresis avoids freeze/melt flicker
+freezePoint[Mat.STEAM] = 90 // condense in cool air; pressure shifts this later
 
 // A "movable" cell can be displaced by density swaps (liquids + gases + fire).
 // Powders are intentionally NOT movable-by-others, so water rests on sand etc.
