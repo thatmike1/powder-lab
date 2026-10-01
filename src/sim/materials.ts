@@ -97,6 +97,14 @@ export const freezePoint = new Float32Array(MAT_COUNT)
 freezePoint[Mat.WATER] = -2 // small hysteresis avoids freeze/melt flicker
 freezePoint[Mat.STEAM] = 90 // condense in cool air; pressure shifts this later
 
+// Fuel ticks: finite, independent of the cosmetic fire lifespan.
+export const FUEL = new Uint16Array(MAT_COUNT)
+FUEL[Mat.WOOD] = 240
+FUEL[Mat.OIL] = 180
+FUEL[Mat.PLANT] = 90
+FUEL[Mat.GUNPOWDER] = 32
+FUEL[Mat.FIRE] = 100
+
 // A "movable" cell can be displaced by density swaps (liquids + gases + fire).
 // Powders are intentionally NOT movable-by-others, so water rests on sand etc.
 const movable = new Uint8Array(MAT_COUNT)

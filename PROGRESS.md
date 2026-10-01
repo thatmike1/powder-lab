@@ -44,7 +44,7 @@ significant; report distributions and the same harness again at unit 7.
    cooling, material heat transport, correct thermal chunk waking.
 2. **Complete:** temperature-led ice/water/steam/glass transitions with latent heat;
    keep thermal state across transitions and serialize new phase progress.
-3. **Pending:** temperature ignition, finite fuel, smoke and heat, quenching;
+3. **Complete:** temperature ignition, finite fuel, smoke and heat, quenching;
    serialize fuel and prevent counter underflow.
 4. **Pending:** integer gas pressure, expansion from boiling/combustion, venting,
    material strength and ruptures; pressure in snapshots and checksums.
@@ -76,7 +76,7 @@ remote exists (origin is configured).
 
 ## Next
 
-Implement unit 3. Unit 1: Q4 temperatures and integer face flux; conduct before
+Implement unit 4. Unit 1: Q4 temperatures and integer face flux; conduct before
 movement, advect heat with particles, precomputed harmonic conductivity, cheaper
 chunk waking. Minimum one-quantum ambient cooling prevents an integer tail from
 keeping chunks awake forever. Retuned fire emission/wood ignition for the changed
@@ -92,3 +92,10 @@ temperature instead of re-seeding the target material. Tests intentionally
 replace old infinite-ice/no-condensation assumptions. 146 tests pass in 18 files;
 type-check and production build pass. Added partial-transition snapshot and
 sealed-steam lifetime checks.
+
+Unit 3: finite Uint16 fuel plus the burning material's origin are serialized in
+state v3, moved with particles and checksummed. Ignited wood/plants remain
+anchored, consuming fuel while emitting heat and smoke; loose flames rise.
+Water/cooling quenches flames; the final fuel tick saturates at zero instead of
+wrapping a Uint8 lifespan. Added ignition/consumption/smoke, last-fuel and active
+burn snapshot tests. 149 tests pass in 19 files; type-check/build pass.

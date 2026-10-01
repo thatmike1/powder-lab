@@ -15,11 +15,11 @@
 //   11 u32  rng state word
 //   15 u32  chunk count (length of the activity arrays)
 //   19 ...  cells[n], life[n], extra[n], active[c], activeNext[c],
-//           stamp[n] as i32, heat[n] as Q4 f32 degrees, phase[n] as i16
+//           stamp[n] as i32, heat[n] as Q4 f32 degrees, phase[n] as i16, fuel[n] as u16, burnFrom[n] as u8
 
 const MAGIC0 = 0x50 // 'P'
 const MAGIC1 = 0x53 // 'S'
-const VERSION = 2
+const VERSION = 3
 const HEADER = 19
 
 /** thrown when bytes aren't a recognizable full simulation state. */
@@ -43,6 +43,8 @@ export interface SimState {
   stamp: Int32Array
   heat: Float32Array
   phase: Int16Array
+  fuel: Uint16Array
+  burnFrom: Uint8Array
 }
 
 export interface DecodedState extends SimState {
@@ -51,7 +53,7 @@ export interface DecodedState extends SimState {
 
 /** total byte length a state of this size encodes to. */
 function byteLength(n: number, c: number): number {
-  return HEADER + 3 * n + 2 * c + 4 * n + 4 * n + 2 * n
+  return HEADER + 3 * n + 2 * c + 4 * n + 4 * n + 2 * n + 3 * n
 }
 
 /**
@@ -60,13 +62,13 @@ function byteLength(n: number, c: number): number {
  * different machines produce identical bytes.
  */
 export function encodeState(state: SimState): Uint8Array<ArrayBuffer> {
-  const { W, H, cells, life, extra, active, activeNext, stamp, heat, phase } = state
+  const { W, H, cells, life, extra, active, activeNext, stamp, heat, phase, fuel, burnFrom } = state
   const n = W * H
   const c = active.length
   if (cells.length !== n || life.length !== n || extra.length !== n) {
     throw new StateFormatError('cell array length does not match W*H')
   }
-  if (stamp.length !== n || heat.length !== n || phase.length !== n) {
+  if (stamp.length !== n || heat.length !== n || phase.length !== n || fuel.length !== n || burnFrom.length !== n) {
     throw new StateFormatError('stamp/heat length does not match W*H')
   }
   if (activeNext.length !== c) {
@@ -100,6 +102,10 @@ export function encodeState(state: SimState): Uint8Array<ArrayBuffer> {
   for (let i = 0; i < n; i++) view.setFloat32(p + i * 4, heat[i], true)
   p += n * 4
   for (let i = 0; i < n; i++) view.setInt16(p + i * 2, phase[i], true)
+  p += n * 2
+  for (let i = 0; i < n; i++) view.setUint16(p + i * 2, fuel[i], true)
+  p += n * 2
+  out.set(burnFrom, p)
   return out
 }
 
@@ -144,5 +150,11 @@ export function decodeState(bytes: Uint8Array): DecodedState {
   const phase = new Int16Array(n)
   for (let i = 0; i < n; i++) phase[i] = view.getInt16(p + i * 2, true)
 
-  return { version, W, H, tick, rngState, cells, life, extra, active, activeNext, stamp, heat, phase }
+  p += n * 2
+  const fuel = new Uint16Array(n)
+  for (let i = 0; i < n; i++) fuel[i] = view.getUint16(p + i * 2, true)
+  p += n * 2
+  const burnFrom = take(n)
+
+  return { version, W, H, tick, rngState, cells, life, extra, active, activeNext, stamp, heat, phase, fuel, burnFrom }
 }

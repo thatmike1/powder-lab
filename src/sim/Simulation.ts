@@ -3,6 +3,7 @@ import {
   density,
   emitTemp,
   freezePoint,
+  FUEL,
   ignitionPoint,
   isDissolvable,
   isMovable,
@@ -66,6 +67,8 @@ export class Simulation {
   extra: Uint8Array // per-cell random seed for color dithering / flicker
   stamp: Int32Array // last frame a cell was touched (prevents double-moves)
   heat: Float32Array // temperature per cell in exact Q4 degrees; moves with particles
+  fuel: Uint16Array // remaining combustible energy
+  burnFrom: Uint8Array // original fuel material; solid fires remain anchored
   phase: Int16Array // signed Q4 latent energy; positive heating, negative cooling
   private heatNext: Float32Array // double buffer for Jacobi-style diffusion
 
@@ -108,6 +111,8 @@ export class Simulation {
     this.extra = new Uint8Array(n)
     this.stamp = new Int32Array(n).fill(-1)
     this.heat = new Float32Array(n).fill(AMBIENT)
+    this.fuel = new Uint16Array(n)
+    this.burnFrom = new Uint8Array(n)
     this.phase = new Int16Array(n)
     this.heatNext = new Float32Array(n)
     for (let i = 0; i < n; i++) this.extra[i] = (this.rng.next() * 256) | 0
@@ -181,6 +186,8 @@ export class Simulation {
     const i = y * this.W + x
     this.cells[i] = mat
     this.phase[i] = 0
+    this.fuel[i] = FUEL[mat]
+    this.burnFrom[i] = 0
     this.extra[i] = (this.rng.next() * 256) | 0
     this.assignSpawnLife(i, mat)
     this.assignSpawnHeat(i, mat)
@@ -201,6 +208,12 @@ export class Simulation {
     const e = this.extra[i1]
     this.extra[i1] = this.extra[i2]
     this.extra[i2] = e
+    const f = this.fuel[i1]
+    this.fuel[i1] = this.fuel[i2]
+    this.fuel[i2] = f
+    const origin = this.burnFrom[i1]
+    this.burnFrom[i1] = this.burnFrom[i2]
+    this.burnFrom[i2] = origin
     const ph = this.phase[i1]
     this.phase[i1] = this.phase[i2]
     this.phase[i2] = ph
@@ -381,6 +394,8 @@ export class Simulation {
     this.cells.fill(Mat.EMPTY)
     this.life.fill(0)
     this.phase.fill(0)
+    this.fuel.fill(0)
+    this.burnFrom.fill(0)
     this.heat.fill(AMBIENT)
     this.activeNext.fill(1)
   }
@@ -403,11 +418,14 @@ export class Simulation {
     this.cells.set(cells)
     this.life.fill(0)
     this.phase.fill(0)
+    this.fuel.fill(0)
+    this.burnFrom.fill(0)
     this.heat.fill(AMBIENT)
     for (let i = 0; i < n; i++) {
       this.extra[i] = (this.rng.next() * 256) | 0
       // fire/smoke/steam need a lifespan or they'd die on the first frame.
       this.assignSpawnLife(i, this.cells[i])
+      this.fuel[i] = FUEL[this.cells[i]]
       // re-seed source temperatures so fire/lava/ice load at the right heat.
       this.assignSpawnHeat(i, this.cells[i])
     }
@@ -447,6 +465,8 @@ export class Simulation {
       stamp: this.stamp,
       heat: this.heat,
       phase: this.phase,
+      fuel: this.fuel,
+      burnFrom: this.burnFrom,
     })
   }
 
@@ -472,6 +492,8 @@ export class Simulation {
     this.stamp.set(st.stamp)
     this.heat.set(st.heat)
     this.phase.set(st.phase)
+    this.fuel.set(st.fuel)
+    this.burnFrom.set(st.burnFrom)
     this.active.set(st.active)
     this.activeNext.set(st.activeNext)
     this.rng.setState(st.rngState)
@@ -503,6 +525,8 @@ export class Simulation {
       mix(q >> 24)
     }
     for (const p of this.phase) { mix(p); mix(p >> 8) }
+    for (const f of this.fuel) { mix(f); mix(f >> 8) }
+    for (const m of this.burnFrom) mix(m)
     return h >>> 0
   }
 
@@ -627,7 +651,7 @@ export class Simulation {
         return
       case Mat.OIL:
         if (this.heat[i] >= ignitionPoint[Mat.OIL] && this.rng.next() < 0.3) {
-          this.setCell(x, y, Mat.FIRE)
+          this.ignite(x, y, i, m)
           return
         }
         this.updateLiquid(x, y, m)
@@ -652,11 +676,11 @@ export class Simulation {
         return
       case Mat.WOOD:
         if (this.heat[i] >= ignitionPoint[Mat.WOOD] && this.rng.next() < 0.3)
-          this.setCell(x, y, Mat.FIRE)
+          this.ignite(x, y, i, m)
         return
       case Mat.PLANT:
         if (this.heat[i] >= ignitionPoint[Mat.PLANT] && this.rng.next() < 0.12) {
-          this.setCell(x, y, Mat.FIRE)
+          this.ignite(x, y, i, m)
           return
         }
         this.growPlant(x, y)
@@ -788,59 +812,40 @@ export class Simulation {
     this.moveGas(x, y, i)
   }
 
+  private ignite(x: number, y: number, i: number, original: number): void {
+    const fuel = this.fuel[i]
+    if (fuel === 0) return
+    this.setCell(x, y, Mat.FIRE)
+    this.fuel[i] = fuel
+    this.burnFrom[i] = original
+  }
+
   private updateFire(x: number, y: number, i: number): void {
-    if (this.life[i] <= 0) {
-      // Burn out into a puff of smoke most of the time.
-      this.setCell(x, y, this.rng.next() < 0.6 ? Mat.SMOKE : Mat.EMPTY)
-      return
-    }
-    this.life[i] -= 1 + ((this.rng.next() * 2) | 0)
-
-    // Wet-count snuff. A flame OVERWHELMED by wet matter (>=2 water/steam
-    // 4-neighbors) is drowning: skip re-emission so its heat craters and puff
-    // out to smoke. A flame with at most one wet neighbor (e.g. water directly
-    // above only) is the boil case — it re-emits and boils that neighbor.
-    // Because a boiled neighbor becomes STEAM (itself wet), the edge of a
-    // submerged fire body flips from coolN=1 to coolN>=2 and erodes inward,
-    // instead of surviving forever inside a steam bubble.
-    const coolN = this.wetNeighbors(x, y)
-    if (coolN >= 2) {
-      // a tiny survival chance keeps a drowning edge flickering for a frame
-      // rather than blinking out flatly; mostly it converts straight to smoke.
-      if (this.rng.next() < 0.92) {
-        this.setCell(x, y, Mat.SMOKE)
-        return
-      }
-      this.wake(x, y)
-      return
-    }
-    // A single coolant neighbor is the boil case (e.g. water directly above):
-    // the flame still re-emits its 1200° (below) and boils that neighbor, but it
-    // also snuffs at a high rate. That erodes the wet EDGE of a submerged body
-    // inward even where each cell touches only one water cell — without it a
-    // pinned body's flat edges (coolN === 1) would survive and boil forever,
-    // only the corners (coolN >= 2) dying. Boiling is near-instant at 1200°, so a
-    // genuine boil-from-below flame still pushes enough heat up before it dies.
-    if (coolN === 1 && this.rng.next() < 0.7) {
+    const wet = this.wetNeighbors(x, y)
+    if (this.fuel[i] === 0 || this.heat[i] < 120 || wet >= 2 || (wet === 1 && this.rng.next() < 0.7)) {
+      const temperature = this.heat[i]
       this.setCell(x, y, Mat.SMOKE)
+      this.heat[i] = temperature
       return
     }
-
-    // re-assert emission temperature (diffusion bled it away last frame); this
-    // is what ignites/boils/melts neighbors once it spreads into them.
-    if (this.heat[i] < emitTemp[Mat.FIRE]) this.heat[i] = emitTemp[Mat.FIRE]
+    const spent = Math.min(this.fuel[i], 1 + ((this.rng.next() * 2) | 0))
+    this.fuel[i] -= spent
+    this.life[i] = Math.min(255, this.fuel[i]) // saturating, never wraps at zero
+    this.heat[i] = Math.max(this.heat[i], emitTemp[Mat.FIRE])
     this.wake(x, y)
 
-    // Flames lick upward — but only when touching NO coolant (coolN === 0). A
-    // flame in contact with water/steam can't climb: it can neither bubble up
-    // through what's dousing it nor "drill" a path by boiling a neighbor to
-    // steam and rising into the vacated cell, because it stays coolant-adjacent
-    // the whole way. So a submerged body can't escape to the surface — it stays
-    // put and erodes via the snuff. In dry air it rises freely as before.
-    if (coolN === 0 && this.rng.next() < 0.5) {
+    // Solid fuel burns in place. A smoke plume above it lets the reaction read
+    // even before the last fuel is consumed. All stochastic visuals are cells
+    // in the seeded simulation; the renderer never advances the PRNG.
+    const anchored = this.burnFrom[i] === Mat.WOOD || this.burnFrom[i] === Mat.PLANT
+    if (anchored && this.matAt(x, y - 1) === Mat.EMPTY && this.rng.next() < 0.08) {
+      this.setCell(x, y - 1, Mat.SMOKE)
+      this.heat[i - this.W] = 180
+    }
+    if (!anchored && wet === 0 && this.rng.next() < 0.5) {
       const first = this.rng.next() < 0.5 ? -1 : 1
       if (this.tryRise(x, y, x, y - 1, Mat.FIRE)) return
-      if (this.tryRise(x, y, x + first, y - 1, Mat.FIRE)) return
+      this.tryRise(x, y, x + first, y - 1, Mat.FIRE)
     }
   }
 
