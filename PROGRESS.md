@@ -48,7 +48,7 @@ significant; report distributions and the same harness again at unit 7.
    serialize fuel and prevent counter underflow.
 4. **Complete:** integer gas pressure, expansion from boiling/combustion, venting,
    material strength and ruptures; pressure in snapshots and checksums.
-5. **Pending:** readable heat view/legend and heat/cool brushes using the existing
+5. **Complete:** readable heat view/legend and heat/cool brushes using the existing
    batched lockstep paint path; tools never become cell materials.
 6. **Pending:** thousands-of-ticks paired simulations, ongoing byte equality,
    live mid-reaction snapshot continuation, chunk borders, network replay.
@@ -76,7 +76,7 @@ remote exists (origin is configured).
 
 ## Next
 
-Implement unit 5. Unit 1: Q4 temperatures and integer face flux; conduct before
+Implement unit 6. Unit 1: Q4 temperatures and integer face flux; conduct before
 movement, advect heat with particles, precomputed harmonic conductivity, cheaper
 chunk waking. Minimum one-quantum ambient cooling prevents an integer tail from
 keeping chunks awake forever. Retuned fire emission/wood ignition for the changed
@@ -108,3 +108,15 @@ state v4 and checksummed; its scratch buffer is rebuilt each pass. Added sealed
 vs vented, boiling glass rupture, fire pressure, wall immunity and pressure
 snapshot continuation checks. 154 tests pass in 20 files; type-check/build pass.
 The model and approximations are documented in docs/thermodynamics.md.
+
+Unit 5: Heat (B) and Cool (K) are intercepted paint IDs, never cell materials;
+they use the existing point/segment batcher and broadcast/replay path. Added
+caps/wall immunity, batched parity and cool-lava regressions. Heat view (H) now
+has a dark ambient ramp, material tint, temperature legend and hover temperature/
+pressure readout. Full-state .powder saves retain physics; legacy layout files
+still load and compact shared URLs remain layouts (UI explains the reset).
+Removed the unseeded fallback draw in page seeding. 157 tests pass in 21 files;
+type-check/build pass with lockfile dependencies restored. Cached Chromium
+verified desktop/mobile heat controls and a 180-degree brush readout without
+page errors; fixed narrow layout clipping and bounded palette height. The
+browser and temporary dev server are stopped.

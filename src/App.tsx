@@ -194,12 +194,12 @@ export default function App() {
           <button
             type="button"
             onClick={shareScene}
-            title="Copy a shareable link"
+            title="Copy a layout link (temperatures reset on load)"
             aria-label="share"
           >
             <ShareIcon size={14} />
           </button>
-          <button type="button" onClick={saveScene} title="Download as .powder" aria-label="save">
+          <button type="button" onClick={saveScene} title="Save materials, temperature, fuel and pressure as .powder" aria-label="save">
             <SaveIcon size={14} />
           </button>
           <button
@@ -264,6 +264,9 @@ export default function App() {
               <span className="stat">
                 <b>{ui.count.toLocaleString()}</b> PARTICLES
               </span>
+              {ui.showTemp && <span className="stat probe">
+                {ui.temperature === null ? 'Hover to inspect' : <><b>{ui.temperature}°</b> · <b>{ui.pressure}</b> pressure</>}
+              </span>}
             </div>
 
             <div className="canvas-frame">
@@ -271,10 +274,15 @@ export default function App() {
               <CursorOverlay net={net} W={W} H={H} />
             </div>
 
+            {ui.showTemp && <div className="heat-legend" aria-label="Temperature scale in sandbox degrees">
+              <span className="cold">−160° cold</span><span className="ambient">20° ambient</span>
+              <span className="boiling">100° boil</span><span className="hot">400° hot</span>
+              <span className="molten">1100° molten</span>
+            </div>}
             <p className="hint">
               drag to draw &middot; <b>right-click</b> to erase &middot; <b>space</b> pause &middot;{' '}
               <b>C</b> clear &middot; <b>G</b> glow &middot; <b>L</b> light &middot; <b>H</b>{' '}
-              heatmap
+              heat view &middot; <b>B</b> heat &middot; <b>K</b> cool
             </p>
           </div>
 
@@ -348,10 +356,10 @@ export default function App() {
               title={`Light ${ui.light ? 'on' : 'off'}`}
             />
             <Toggle
-              label="Temp"
+              label="Heat view"
               on={ui.showTemp}
               onClick={toggleTemp}
-              title={`Heatmap ${ui.showTemp ? 'on' : 'off'}`}
+              title={`Heat view ${ui.showTemp ? 'on' : 'off'}`}
             />
 
             <Meter

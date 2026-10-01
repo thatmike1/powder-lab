@@ -175,3 +175,19 @@ server memory only; an empty room is dropped after a grace period.
 
 Persistence across server restarts, authentication, rollback netcode, per-user
 undo, spectator mode, and any deployment concern beyond running locally.
+
+## Thermodynamics extension (feat/thermo)
+
+The tick clock and opaque relay protocol are unchanged. `paint.mat` also names
+Heat (20) and Cool (21) brushes; `Simulation.paint` intercepts them to change
+temperature instead of creating cells. They use the existing point/segment
+batcher, ordered broadcasts and retained replay log. There is no local echo.
+Heat view and its hover readout are cosmetic per-client settings.
+
+Full simulation state **version 4** supersedes the field description above:
+`heat` stores exact Q4 degrees; `phase` is signed Int16 latent energy, `fuel` is
+Uint16, `burnFrom` is Uint8, and `pressure` is Uint16. All are little-endian after
+the v1 fields; both chunk queues and PRNG state remain mandatory. Scratch heat
+and pressure buffers are copied before every use and carry no persistent state.
+Checksums include these new fields. New saves use the full state; legacy RLE
+files and shared layout links still restore only materials and spawn defaults.

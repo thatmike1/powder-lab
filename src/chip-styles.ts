@@ -47,6 +47,8 @@ export const CHIP_STYLES: Record<number, CSSProperties> = {
   [Mat.EMPTY]: checker('rgb(30,33,38)', 'rgb(48,52,58)', 'rgb(48,52,58)'),
   [Mat.WALL]: grid('rgb(120,122,130)', 'rgb(96,98,106)', 'rgb(140,142,150)'),
   // magnet: red poles with steel banding — reads as a horseshoe magnet's stripe.
+  [Mat.HEAT]: checker('rgb(220,80,30)', 'rgb(255,180,90)', 'rgb(255,126,64)'),
+  [Mat.COOL]: checker('rgb(50,100,190)', 'rgb(140,220,255)', 'rgb(84,172,240)'),
   [Mat.MAGNET]: band('rgb(196,72,84)', 'rgb(150,40,52)'),
 
   [Mat.SAND]: dots('rgb(196,180,120)', 'rgb(168,152,94)', 'rgb(216,202,150)'),

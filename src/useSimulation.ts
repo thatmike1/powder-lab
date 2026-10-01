@@ -11,6 +11,7 @@ import {
 import { Mat, PALETTE } from './sim/materials'
 import { Simulation } from './sim/Simulation'
 import { decodeRLE, readSceneFromHash, sceneToHash } from './sim/scene'
+import { decodeState } from './sim/state'
 
 export interface SimUiState {
   running: boolean
@@ -23,6 +24,8 @@ export interface SimUiState {
   speed: number
   fps: number
   count: number
+  temperature: number | null
+  pressure: number | null
   /** true inside a room, where speed is pinned to 1 and single-stepping is off */
   speedLocked: boolean
 }
@@ -53,7 +56,7 @@ const MAX_CATCHUP = 32
 function freshSeed(): number {
   const buf = new Uint32Array(1)
   if (globalThis.crypto?.getRandomValues) globalThis.crypto.getRandomValues(buf)
-  else buf[0] = Date.now() ^ ((Math.random() * 0xffffffff) | 0)
+  else buf[0] = Date.now() >>> 0
   return buf[0] >>> 0 || 1
 }
 
@@ -74,7 +77,7 @@ export function useSimulation(W: number, H: number, scale: number) {
   })
 
   // Pointer state, also outside React so the loop can read it for "faucet" mode.
-  const pointer = useRef({ down: false, erase: false, x: 0, y: 0 })
+  const pointer = useRef({ down: false, erase: false, inside: false, x: 0, y: 0 })
 
   const [ui, setUi] = useState<SimUiState>({
     running: true,
@@ -87,6 +90,8 @@ export function useSimulation(W: number, H: number, scale: number) {
     speed: 1,
     fps: 0,
     count: 0,
+    temperature: null,
+    pressure: null,
     speedLocked: false,
   })
 
@@ -226,6 +231,7 @@ export function useSimulation(W: number, H: number, scale: number) {
       } catch {}
       const { gx, gy } = toGrid(e.clientX, e.clientY)
       const now = performance.now()
+      pointer.current.inside = true
       pointer.current.down = true
       pointer.current.erase = e.button === 2 // right-click erases
       pointer.current.x = gx
@@ -242,7 +248,8 @@ export function useSimulation(W: number, H: number, scale: number) {
       const { gx, gy } = toGrid(e.clientX, e.clientY)
       // presence is cosmetic and outside lockstep — throttled inside the session.
       session.sendCursor(gx, gy)
-      if (!pointer.current.down) return
+      pointer.current.inside = gx >= 0 && gx < W && gy >= 0 && gy < H
+      if (!pointer.current.down) { pointer.current.x = gx; pointer.current.y = gy; return }
       const now = performance.now()
       // Interpolate so fast strokes don't leave gaps.
       const px = pointer.current.x,
@@ -268,12 +275,14 @@ export function useSimulation(W: number, H: number, scale: number) {
         canvas.releasePointerCapture(e.pointerId)
       } catch {}
     }
+    const onLeave = () => { pointer.current.inside = false }
     const onCtx = (e: Event) => e.preventDefault()
 
     canvas.addEventListener('pointerdown', onDown)
     canvas.addEventListener('pointermove', onMove)
     window.addEventListener('pointerup', onUp)
     canvas.addEventListener('contextmenu', onCtx)
+    canvas.addEventListener('pointerleave', onLeave)
 
     let raf = 0
     let frames = 0
@@ -327,7 +336,11 @@ export function useSimulation(W: number, H: number, scale: number) {
         const fps = Math.round((frames * 1000) / (now - fpsT))
         frames = 0
         fpsT = now
-        setUi((u) => ({ ...u, fps, count: sim?.count ?? u.count }))
+        const p = pointer.current, i = p.y * W + p.x
+        const probe = sim && p.inside && p.x >= 0 && p.x < W && p.y >= 0 && p.y < H
+        setUi((u) => ({ ...u, fps, count: sim?.count ?? u.count,
+          temperature: probe ? Math.round(sim.heat[i]) : null,
+          pressure: probe ? sim.pressure[i] : null }))
       }
       raf = requestAnimationFrame(loop)
     }
@@ -339,6 +352,7 @@ export function useSimulation(W: number, H: number, scale: number) {
       canvas.removeEventListener('pointermove', onMove)
       window.removeEventListener('pointerup', onUp)
       canvas.removeEventListener('contextmenu', onCtx)
+      canvas.removeEventListener('pointerleave', onLeave)
       // dropping the sim here would take the room's with it; a live room keeps
       // stepping through the session's own hooks.
       if (!session.connected) simRef.current = null
@@ -432,7 +446,7 @@ export function useSimulation(W: number, H: number, scale: number) {
   const saveScene = useCallback(() => {
     const sim = simRef.current
     if (!sim) return
-    const blob = new Blob([sim.snapshot()], { type: 'application/octet-stream' })
+    const blob = new Blob([sim.serializeState()], { type: 'application/octet-stream' })
     const url = URL.createObjectURL(blob)
     const a = document.createElement('a')
     a.href = url
@@ -491,6 +505,18 @@ export function useSimulation(W: number, H: number, scale: number) {
       if (!sim) return
       try {
         const bytes = new Uint8Array(await file.arrayBuffer())
+        if (bytes[0] === 0x50 && bytes[1] === 0x53) {
+          const state = decodeState(bytes)
+          if (state.W !== W || state.H !== H) throw new Error('Wrong board dimensions')
+          if (session.connected) {
+            session.sendInput({ type: 'setState', state: encodeStateEnvelope(session.roomTick, false, bytes), reason: 'load' })
+            session.sendInput({ type: 'running', on: false })
+          } else if (sim.loadState(bytes)) {
+            cfg.current.running = false
+            setUi((u) => ({ ...u, running: false }))
+          }
+          return
+        }
         const { W: sw, H: sh, cells } = decodeRLE(bytes)
         if (cells.length !== sim.W * sim.H) {
           alert(`That scene is ${sw}×${sh}, but this board is ${sim.W}×${sim.H}.`)
@@ -510,7 +536,7 @@ export function useSimulation(W: number, H: number, scale: number) {
         alert("Couldn't read that file — it doesn't look like a Powder Lab scene.")
       }
     },
-    [session, stateForCells],
+    [session, stateForCells, W, H],
   )
 
   // Keyboard shortcuts.

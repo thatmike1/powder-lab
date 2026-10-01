@@ -23,11 +23,13 @@ export const Mat = {
   // names a brush mode (like Eraser reuses EMPTY). Kept inside MAT_COUNT so the
   // property tables stay densely indexed, but it's intercepted before any paint.
   MAGNET: 18,
+  HEAT: 20, // thermal brush, never a cell
+  COOL: 21, // thermal brush, never a cell
   GLASS: 19, // formed when sand melts under sustained lava heat
 } as const
 
 export type MatId = number
-export const MAT_COUNT = 20
+export const MAT_COUNT = 22
 
 // Density drives displacement: a denser mover sinks through / swaps with a
 // lighter *movable* cell. Static solids (wall, stone, wood, plant, ice) are
@@ -158,6 +160,8 @@ export const PALETTE: MatMeta[] = [
   { id: Mat.EMPTY, name: 'Eraser', rgb: [30, 33, 38], cat: 'Tools', key: 'E' },
   { id: Mat.WALL, name: 'Wall', rgb: [120, 122, 130], cat: 'Tools', key: 'W' },
   { id: Mat.MAGNET, name: 'Magnet', rgb: [196, 72, 84], cat: 'Tools', key: 'N' },
+  { id: Mat.HEAT, name: 'Heat', rgb: [255, 126, 64], cat: 'Tools', key: 'B' },
+  { id: Mat.COOL, name: 'Cool', rgb: [84, 172, 240], cat: 'Tools', key: 'K' },
 
   { id: Mat.SAND, name: 'Sand', rgb: [196, 180, 120], cat: 'Powders', key: '1' },
   { id: Mat.GUNPOWDER, name: 'Gunpowder', rgb: [70, 68, 78], cat: 'Powders', key: '2' },

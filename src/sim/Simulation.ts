@@ -16,7 +16,7 @@ import {
 import { DEFAULT_SEED, Rng } from './rng'
 import { encodeRLE } from './scene'
 import { decodeState, encodeState } from './state'
-import { AMBIENT, FACE, TEMP_SCALE } from './thermal'
+import { AMBIENT, FACE, TEMP_SCALE, quantizeTemp } from './thermal'
 
 const CS = 16 // chunk size (cells per side)
 
@@ -239,6 +239,11 @@ export class Simulation {
 
   /** Paint a filled circle of `mat` (EMPTY = erase) centered at grid (cx,cy). */
   paint(cx: number, cy: number, r: number, mat: number): void {
+    if (mat === Mat.HEAT || mat === Mat.COOL) {
+      this.thermalBrush(cx, cy, r, mat === Mat.HEAT ? 160 : -1600)
+      return
+    }
+    if (!Number.isInteger(mat) || mat < 0 || mat >= MAT_COUNT || mat === Mat.MAGNET) return
     const r2 = r * r
     for (let dy = -r; dy <= r; dy++) {
       for (let dx = -r; dx <= r; dx++) {
@@ -250,6 +255,20 @@ export class Simulation {
         if (mat !== Mat.EMPTY && this.cells[y * this.W + x] === Mat.WALL) continue
         this.setCell(x, y, mat)
       }
+    }
+  }
+
+  /** A thermal tool uses the ordinary batched paint event, so each sample
+   * applies once at the same tick on every peer. It never creates a material. */
+  private thermalBrush(cx: number, cy: number, r: number, delta: number): void {
+    for (let dy = -r; dy <= r; dy++) for (let dx = -r; dx <= r; dx++) {
+      if (dx * dx + dy * dy > r * r) continue
+      const x = cx + dx, y = cy + dy
+      if (x < 0 || y < 0 || x >= this.W || y >= this.H) continue
+      const i = y * this.W + x
+      if (this.cells[i] === Mat.WALL) continue
+      this.heat[i] = quantizeTemp(this.heat[i] + delta)
+      this.wake(x, y)
     }
   }
 
@@ -424,7 +443,7 @@ export class Simulation {
    */
   restore(cells: Uint8Array): boolean {
     const n = this.W * this.H
-    if (cells.length !== n) return false
+    if (cells.length !== n || cells.some(m => m >= MAT_COUNT || m === Mat.MAGNET || m === Mat.HEAT || m === Mat.COOL)) return false
     this.cells.set(cells)
     this.life.fill(0)
     this.phase.fill(0)
@@ -1007,7 +1026,7 @@ export class Simulation {
     // solver only craters a water-touching cell ~60°/frame — a deep gate would
     // never be reached. Checked BEFORE re-emission so it reads the value last
     // frame's diffusion left behind (re-asserting first would pin it molten).
-    if (coolantAdjacent && this.heat[i] < emitTemp[Mat.LAVA] - LAVA_QUENCH_DELTA) {
+    if (this.heat[i] < 400 || (coolantAdjacent && this.heat[i] < emitTemp[Mat.LAVA] - LAVA_QUENCH_DELTA)) {
       this.setCell(x, y, Mat.STONE)
       return
     }
@@ -1117,7 +1136,12 @@ export class Simulation {
    * saturated + animated, so they're left alone).
    */
   private colorOf(m: number, lf: number, ex: number, h: number): number {
-    if (this.showTemp) return this.heatColor(h)
+    if (this.showTemp) {
+      const t = this.heatColor(h), c = this.baseColor(m, lf, ex)
+      return rgba(((t & 255) * 3 + (c & 255)) >> 2,
+        (((t >> 8) & 255) * 3 + ((c >> 8) & 255)) >> 2,
+        (((t >> 16) & 255) * 3 + ((c >> 16) & 255)) >> 2)
+    }
     const c = this.baseColor(m, lf, ex)
     if (m === Mat.FIRE || m === Mat.LAVA || m === Mat.LIGHTNING) return c
     return this.tint(c, h)
@@ -1134,13 +1158,16 @@ export class Simulation {
     return rgba(clamp(r + d), g, clamp(b - d))
   }
 
-  /** debug heatmap ramp: cold -> blue, ambient -> white-ish, hot -> red. */
+  /** Piecewise temperature colors keep ambient dark and reactions readable. */
   private heatColor(h: number): number {
-    const t = h < -60 ? 0 : h > 600 ? 1 : (h + 60) / 660
-    const r = clamp(255 * Math.min(1, t * 2))
-    const b = clamp(255 * Math.min(1, (1 - t) * 2))
-    const g = clamp(255 * (1 - Math.abs(t - 0.5) * 2))
-    return rgba(r, g, b)
+    const stops = [-160, 0, 20, 100, 400, 1100, 2400]
+    const colors = [[45, 85, 220], [90, 180, 220], [24, 26, 32],
+      [180, 95, 35], [240, 50, 24], [255, 180, 45], [255, 245, 220]]
+    let k = 0
+    while (k < stops.length - 2 && h > stops[k + 1]) k++
+    const t = Math.max(0, Math.min(1, (h - stops[k]) / (stops[k + 1] - stops[k])))
+    const a = colors[k], b = colors[k + 1]
+    return rgba(Math.round(a[0] + (b[0] - a[0]) * t), Math.round(a[1] + (b[1] - a[1]) * t), Math.round(a[2] + (b[2] - a[2]) * t))
   }
 
   private baseColor(m: number, lf: number, ex: number): number {

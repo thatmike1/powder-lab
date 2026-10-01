@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { Simulation } from './Simulation'
-import { Mat } from './materials'
+import { Mat, MAT_COUNT } from './materials'
 import { FACE, TEMP_SCALE } from './thermal'
 
 describe('fixed-point thermal transport', () => {
@@ -12,7 +12,7 @@ describe('fixed-point thermal transport', () => {
     s.step()
     expect(s.heat[8 * 32 + 16]).toBeGreaterThan(20)
     for (const t of s.heat) expect(Number.isInteger(t * TEMP_SCALE)).toBe(true)
-    expect(FACE[16 * 20 + 4]).toBe(FACE[4 * 20 + 16])
+    expect(FACE[Mat.METAL * MAT_COUNT + Mat.STONE]).toBe(FACE[Mat.STONE * MAT_COUNT + Mat.METAL])
   })
 
   it('carries the heat of a falling particle to its new cell', () => {

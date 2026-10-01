@@ -105,3 +105,18 @@ src/
 ## License
 
 MIT
+
+## Thermodynamics
+
+On `feat/thermo`, Heat view (`H`) shows temperature with a legend and a hover
+readout for temperature/pressure. Paint **Heat** (`B`) to boil water, ignite fuel
+or fuse sand, and **Cool** (`K`) to freeze water, condense steam or solidify lava.
+Metal carries heat; stone slows it and Wall insulates. Ice warms and melts;
+steam condenses instead of fading away. Wood, plants and oil have finite fuel.
+Sealed steam and burning pockets build pressure and can rupture glass/wood/stone;
+Wall survives. Try a glass enclosure with water over lava, then open a vent.
+
+`.powder` downloads now preserve temperature, latent heat, fuel, pressure and
+chunk/PRNG state. Older files still load. Shared URL links remain compact
+material layouts and reset temperatures. See [thermal model](docs/thermodynamics.md)
+for the accelerated units, thresholds and deterministic implementation.

@@ -1275,3 +1275,29 @@ kbd {
     animation: none;
   }
 }
+
+/* Temperature legend uses discrete pixel swatches from the simulation ramp. */
+.heat-legend { display: flex; flex-wrap: wrap; gap: 12px; font: 11px "JetBrains Mono", monospace; color: var(--muted); }
+.heat-legend span::before { content: ""; display: inline-block; width: 8px; height: 8px; margin-right: 4px; border: 1px solid var(--hairline); background: var(--heat-swatch); }
+.heat-legend .cold { --heat-swatch: rgb(45,85,220); }
+.heat-legend .ambient { --heat-swatch: rgb(24,26,32); }
+.heat-legend .boiling { --heat-swatch: rgb(180,95,35); }
+.heat-legend .hot { --heat-swatch: rgb(240,50,24); }
+.heat-legend .molten { --heat-swatch: rgb(255,180,45); }
+.hud { flex-wrap: wrap; }
+
+.stage { min-width: 0; }
+@media (max-width: 900px) {
+  .body { grid-template-columns: minmax(0, 1fr); }
+  .titlebar { flex-wrap: wrap; }
+  .titlebar .wordmark { flex-basis: 100%; }
+  .rail { max-height: 240px; overflow-y: auto; }
+  .group { min-width: 0; }
+}
+@media (max-width: 900px) {
+  .titlebar { height: auto; min-height: 76px; padding-top: 8px; padding-bottom: 8px; }
+  .rail { overflow-x: hidden; }
+  .swatch-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .tile, .tile .meta { min-width: 0; }
+  .tile .mname { overflow: hidden; text-overflow: ellipsis; }
+}
