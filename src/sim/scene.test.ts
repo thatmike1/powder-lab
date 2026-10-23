@@ -35,7 +35,7 @@ describe('saved scene parser and share links', () => {
 
   it('rejects short headers and either incorrect magic byte as scene format errors', () => {
     for (const bytes of [
-      new Uint8Array(6),
+      Uint8Array.from(header(0, 0).slice(0, 6)),
       Uint8Array.from([0, 0x4c, 1, 0, 0, 0, 0]),
       Uint8Array.from([0x50, 0, 1, 0, 0, 0, 0]),
     ]) {
