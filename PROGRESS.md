@@ -28,10 +28,10 @@ Final 200×150 CPU step cost: **5.86 ms mean for full lava** (baseline 19.13 ms)
 hourglass. All benchmark mean/median/p95 values fit the 13.33 ms tick budget;
 shared-server scheduling can still cause outliers. These exclude rendering.
 
-To try it: run `npm run dev`, open **Gallery**, choose **Hot & Cold**,
+To try it: run `pnpm run dev`, open **Gallery**, choose **Hot & Cold**,
 **Pressure Cooker** or **Glassworks**, then **Play**. Use **H** for heat view,
 **B/K** for heat/cool, **J/U** for heater/chiller. In the cooker, erase the lid
-before Play to compare a vented vessel. For multiplayer, also run `npm run server`
+before Play to compare a vented vessel. For multiplayer, also run `pnpm run server`
 and share a room link between peers using this build. Full `.powder` saves retain
 reactions; compact URL scenes restore material layouts. The live site remains
 on main until this branch is deliberately deployed.
@@ -98,7 +98,7 @@ significant; report distributions and the same harness again at unit 7.
    gallery contraptions, desktop/mobile visual checks and actual relay parity.
 
 Each unit is also tracked under beads epic powder-lab-t7i. Before every commit:
-`npm run typecheck`, single-worker Vitest, and `npm run build`. Update this file
+`pnpm run typecheck`, single-worker Vitest, and `pnpm run build`. Update this file
 and push feat/thermo after every unit. Main must never be pushed. User's explicit
 branch/push/checkpoint instructions override generated bd-prime text claiming no
 remote exists (origin is configured).
@@ -179,7 +179,7 @@ scripts and produced the same 31,141 bytes, SHA-256
 `7752aa103d69b07a69c70f332e1d095790bf6ed1f4538ff29671c82b304cfa25`.
 The temporary browser/server have been stopped.
 
-Unit 7: repeatable `npm run bench:sim -- --stress` uses the same baseline sizes,
+Unit 7: repeatable `pnpm run bench:sim --stress` uses the same baseline sizes,
 seed, warmup and samples, plus continuously heated sealed steam and replenished
 burning fuel. Fast corner-aware chunk waking, precomputed conductivity and
 integer passes preserve before/after benchmark checksums. Heat-view rendering

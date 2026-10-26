@@ -5,13 +5,13 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 ## Commands
 
 ```bash
-npm run dev        # Vite dev server at http://localhost:5173 (base path is "/" in dev)
-npm run build      # tsc --noEmit (typecheck) THEN vite build -> dist/
-npm run typecheck  # types only, no build
-npm run preview    # serve the production build locally
+pnpm run dev        # Vite dev server at http://localhost:5173 (base path is "/" in dev)
+pnpm run build      # tsc --noEmit (typecheck) THEN vite build -> dist/
+pnpm run typecheck  # types only, no build
+pnpm run preview    # serve the production build locally
 ```
 
-There is no test suite and no linter configured. `npm run build` is the gate — it typechecks before building, so a green build means types are sound.
+There is no test suite and no linter configured. `pnpm run build` is the gate — it typechecks before building, so a green build means types are sound.
 
 **Deployment is automatic.** Pushing to `main` triggers `.github/workflows/deploy.yml`, which builds and publishes `dist/` to GitHub Pages (https://thatmike1.github.io/powder-lab/). No manual deploy step.
 

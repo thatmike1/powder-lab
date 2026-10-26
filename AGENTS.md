@@ -73,7 +73,7 @@ bd close <id>         # Complete work
 Before the last message of a session:
 
 1. File a bead for anything left over, and close the finished ones.
-2. Run the quality gate if code changed: `npm run build`.
+2. Run the quality gate if code changed: `pnpm run build`.
 3. Commit, and once the work is finished and verified, push, `main` included: it redeploys the live site to GitHub Pages (`.github/workflows/deploy.yml`), and that needs no asking.
 4. Hand off: what changed, what was verified, what the next session picks up.
 <!-- END BEADS INTEGRATION -->

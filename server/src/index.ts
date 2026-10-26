@@ -121,7 +121,7 @@ export function startRelay(
   }
 }
 
-// started directly (npm run server) rather than imported by a test
+// started directly (pnpm run server) rather than imported by a test
 const entry = process.argv[1]
 if (entry !== undefined && pathToFileURL(entry).href === import.meta.url) {
   const relay = startRelay()
