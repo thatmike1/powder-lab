@@ -50,20 +50,20 @@ cycle.
 ## Run it
 
 ```bash
-npm install
-npm run dev      # http://localhost:5173
+pnpm install
+pnpm run dev      # http://localhost:5173
 ```
 
 ```bash
-npm run build    # typecheck + production build into dist/
-npm run preview  # serve the production build
+pnpm run build    # typecheck + production build into dist/
+pnpm run preview  # serve the production build
 ```
 
 ### Multiplayer
 
 ```bash
-npm run server   # the relay, ws://localhost:8787
-npm run dev      # in another terminal
+pnpm run server   # the relay, ws://localhost:8787
+pnpm run dev      # in another terminal
 ```
 
 Open the app, start a room from the pill in the title bar, and share the
@@ -139,4 +139,4 @@ material layouts and reset temperatures. All room peers must use the same build;
 incompatible full-state versions disconnect with a reload message. See
 [thermal model](docs/thermodynamics.md) for the accelerated units, thresholds and
 deterministic implementation, and [PROGRESS.md](PROGRESS.md) for measured costs
-and verification. `npm run bench:sim -- --stress` repeats the CPU benchmark.
+and verification. `pnpm run bench:sim --stress` repeats the CPU benchmark.

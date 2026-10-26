@@ -94,10 +94,10 @@ when stepping resumes. Palette tooltips describe the new materials.
 
 ## Verification and budget
 
-`npm test -- --maxWorkers=1 --minWorkers=1` includes a paired 4096-tick thermal
+`pnpm test --maxWorkers=1 --minWorkers=1` includes a paired 4096-tick thermal
 script that compares complete state bytes after every tick, render differences,
 scratch-buffer poisoning and mid-reaction reloads. Additional tests cover phase
 reversal, chunk borders, finite fuel, gas confinement/venting and network replay.
-`npm run bench:sim -- --stress` measures CPU step cost for 200×150 cells, with
+`pnpm run bench:sim --stress` measures CPU step cost for 200×150 cells, with
 100 warmup and 400 measured ticks; rendering is outside those timings. The
 75 Hz step budget is 13.33 ms. See `PROGRESS.md` for results on the shared ARM box.
