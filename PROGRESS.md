@@ -1,3 +1,79 @@
+# Heat polish checkpoint (feat/heat-polish, bead ccChat-general-8aej)
+
+## Summary
+
+Heat now behaves like heat without the tools doing the work. Open air is the
+room's heat sink and the only thing that relaxes quickly toward 20 degrees;
+solids and liquids keep their heat and cool by conducting into the air at their
+surface, so a hot block cools from the outside in. Materials have heat
+capacities (air 1, water/stone 3, metal/glass 2.5), so water takes a while to
+boil and a hot slab stores heat. Buoyancy carries warm gas up and cold gas down,
+so fires, heaters and lava throw a plume instead of a round halo, and a
+chiller's cold air sinks. Red-hot solids glow on a black-body ramp and light the
+scene; hot air shows a faint haze and cold matter frosts over. Burning wood
+flares with licking flames, then dies down to embers before going out. Water
+falling on a flame now puts it out with a hiss of steam instead of swapping
+places with it.
+
+Model details are in [docs/thermodynamics.md](docs/thermodynamics.md).
+
+## Before vs after (measured in Chromium, same scripted scenes)
+
+| | Before | After |
+| --- | --- | --- |
+| 1100-degree metal bar | above 430 for 0.3 s, never visibly glows; 20 by 5 s | glows about 2 s; 43 at 10 s, 20 by 20 s |
+| 1100-degree stone block core after 10 s | 20 (core cooled as fast as skin) | 657 core, 220 skin |
+| 500-cell ice block in open air | melted in 2 s | melts over about 20 s |
+| Log pile | burnt out by 8 s | flares, embers, out by about 19 s |
+| Forest Fire preset | all gone by about 30 s | crown to crown over about 60 s |
+| Heater in open air (heat view) | round halo, about 6 cells | plume rising about 30 cells |
+
+## Verification
+
+`pnpm run build` (typecheck + build) passes; `pnpm test --maxWorkers=1
+--minWorkers=1`: **193 tests in 25 files pass**. Lint counts match main (the 40
+pre-existing errors are untouched). Five characterization tests encoded the old
+tuning and were rewritten to assert the new behavior, each with a comment: hot
+mass cools outside-in (was: drained to ambient in 150 ticks), lava sends a plume
+up but not sideways (was: halo stays local), wood burns longer (300 to 1200
+ticks), the stone-wall test gets a containing floor and a 2-cell wall (its lava
+used to drain off-grid), and two melt/freeze tests got realistic budgets.
+
+CPU benchmark (`pnpm run bench:sim --stress`, shared 2-core ARM box, quiet
+runs, ms/step mean): full lava 5.9-7.0 before vs 6.8-7.6 after; sealed hot
+steam 6.6 vs 7.3-8.1; mixed 4.9 vs 4.9-6.1; burning fuel 5.2 vs 5.4-6.0;
+hourglass 0.52 vs 0.54-0.68. All within the 13.33 ms tick budget.
+
+In-browser frame intervals (headless Chromium without a GPU): with bloom and
+lighting off, both builds hold a steady 60 fps (16.7 ms median and p95) in
+Campfire, Volcano, Forest Fire and a hot-slab scene. With them on, any scene
+with emissive cells runs about 30 fps on this box in both builds (canvas blur
+is rasterized on the CPU here); hot slabs now count as emissive, so a scene
+with only glowing metal/stone joins that group. GPU browsers blur on the GPU.
+
+Not verified: multiplayer relay parity in real browsers. The model is integer
+and identical on every peer, and the paired 4096-tick byte-equality and
+snapshot-continuation tests pass, but no two-browser room run was repeated.
+
+## Decisions
+
+- The bead said to ask Mike what else felt off first; the brief for this run
+  said to make the changes I judged most satisfying, so I skipped the question.
+- Convection is donor-cell transport clamped to each cell's neighbor range. Pure
+  symmetric "extra conductance upward" only stretched the halo; the clamp keeps
+  trapped air from exceeding its source (an early version reached 3100 degrees).
+- Gases conduct at 0.5 instead of 1 so the explicit stencil stays stable with
+  buoyancy (four faces x 1/16 + 0.4 + room loss < 1).
+- A dev-only `globalThis.powder` handle (sim + config) in `useSimulation.ts`
+  drives scripted browser checks; production builds strip it.
+
+## Next ideas
+
+- Tune Forest Fire spread speed if a minute feels slow.
+- Heat-shimmer animation for hot air (currently a static haze color).
+
+---
+
 # Thermodynamics checkpoint — feat/thermo
 
 ## Final summary

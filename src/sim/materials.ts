@@ -48,8 +48,8 @@ density[Mat.FIRE] = 1
 density[Mat.SMOKE] = 1
 density[Mat.STEAM] = 1
 
-// Per-material thermal conductivity (0 = perfect insulator, 1 = conducts like
-// air). Drives the harmonic-mean face flow in Simulation.diffuse(): heat through
+// Per-material thermal conductivity (0 = perfect insulator, 1 = the most
+// conductive). Drives the harmonic-mean face flow in Simulation.diffuse(): heat through
 // the boundary between two cells is throttled by the *less* conductive one, so a
 // cond-0 WALL is thermally inert with no special-case. Defaults to 1; only
 // insulators and conductors deviate. GUNPOWDER must be listed — omitting it would
@@ -72,7 +72,45 @@ CONDUCT[Mat.OIL] = 0.6
 CONDUCT[Mat.ACID] = 0.6
 CONDUCT[Mat.METAL] = 0.9
 CONDUCT[Mat.FILINGS] = 0.9
-// EMPTY / SMOKE / STEAM / LIGHTNING keep the 1.0 default.
+// gases are poor conductors: they mostly carry heat by rising (CONVECT). The
+// explicit stencil needs 4 faces x 0.5/8 + CONVECT + room loss below 1.
+for (const m of [Mat.EMPTY, Mat.SMOKE, Mat.STEAM, Mat.LIGHTNING]) CONDUCT[m] = 0.5
+
+// volumetric heat capacity relative to air. Air holds almost no heat, so it
+// warms and sheds heat fast; water, stone and metal store a lot, so a bath takes
+// a while to boil and a hot slab keeps glowing after the air around it cools.
+// Values below 1 would make the explicit stencil unstable.
+export const HEAT_CAP = new Float32Array(MAT_COUNT).fill(1)
+HEAT_CAP[Mat.WATER] = 3
+HEAT_CAP[Mat.ACID] = 3
+HEAT_CAP[Mat.OIL] = 2
+HEAT_CAP[Mat.ICE] = 2.5
+HEAT_CAP[Mat.STONE] = 3
+HEAT_CAP[Mat.GLASS] = 2.5
+HEAT_CAP[Mat.METAL] = 2.5
+HEAT_CAP[Mat.FILINGS] = 2
+HEAT_CAP[Mat.SAND] = 2
+HEAT_CAP[Mat.GUNPOWDER] = 2
+HEAT_CAP[Mat.WOOD] = 2
+HEAT_CAP[Mat.PLANT] = 2
+HEAT_CAP[Mat.LAVA] = 3
+
+// buoyancy: across a vertical face between two fluids where the lower cell is
+// hotter, this fraction of its warmth above ambient rises (and of the upper
+// cell's chill sinks) each tick. Gases rise freely, liquids stir slowly;
+// solids and powders never convect.
+export const CONVECT = new Float32Array(MAT_COUNT)
+for (const m of [Mat.EMPTY, Mat.FIRE, Mat.SMOKE, Mat.STEAM, Mat.LIGHTNING]) CONVECT[m] = 0.4
+for (const m of [Mat.WATER, Mat.OIL, Mat.ACID]) CONVECT[m] = 0.08
+
+// how each cell meets the room, as a relaxation divisor toward ambient (the
+// cell closes 1/n of its gap each tick, at least one quantum). Open air is the
+// room's heat sink; smoke lingers a little warmer; everything else only loses
+// a slow radiative trickle and otherwise cools through the air at its surface.
+export const ROOM_LOSS = new Uint16Array(MAT_COUNT).fill(1500)
+ROOM_LOSS[Mat.EMPTY] = 60
+ROOM_LOSS[Mat.SMOKE] = 80
+ROOM_LOSS[Mat.STEAM] = 400
 
 // Thermal tables in accelerated sandbox degrees. Water uses familiar 0/100
 // boundaries; the sand fusion gate is scaled for visible glass-making in lava.
@@ -105,9 +143,9 @@ freezePoint[Mat.STEAM] = 90 // condense in cool air; pressure shifts this later
 
 // Fuel ticks: finite, independent of the cosmetic fire lifespan.
 export const FUEL = new Uint16Array(MAT_COUNT)
-FUEL[Mat.WOOD] = 240
+FUEL[Mat.WOOD] = 600
 FUEL[Mat.OIL] = 180
-FUEL[Mat.PLANT] = 90
+FUEL[Mat.PLANT] = 160
 FUEL[Mat.GUNPOWDER] = 32
 FUEL[Mat.FIRE] = 100
 

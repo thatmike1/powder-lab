@@ -13,13 +13,35 @@ No wall clock, renderer setting or adaptive performance branch enters physics.
 ## Heat
 
 Temperature is stored as Float32 **exact multiples of 1/16 degree**. Integer Q4
-gradients and precomputed Q10 harmonic face conductivity drive a stable
-four-neighbor Jacobi stencil. Ambient cooling goes toward 20, by at least one
-quantum until it settles. Conducting metal bridges heat; stone/wood/glass slow
-it; Wall is an ideal insulator. Particle swaps carry heat, latent energy and
-fuel. Pressure stays in space between gas cells; a gas/liquid displacement
-carries the displaced gas volume's pressure into its new cell.
+gradients and precomputed Q10 harmonic face conductivity drive a four-neighbor
+Jacobi stencil. Conducting metal bridges heat; stone/wood/glass slow it; Wall
+is an ideal insulator; gases are poor conductors. Particle swaps carry heat,
+latent energy and fuel. Pressure stays in space between gas cells; a gas/liquid
+displacement carries the displaced gas volume's pressure into its new cell.
 
+**Heat capacity.** A cell's net face energy becomes temperature through its
+volumetric heat capacity (`HEAT_CAP`, air = 1): water and stone 3, metal and
+glass 2.5, sand/wood 2. Air warms and sheds heat fast; a bath takes a while to
+boil; a hot slab stores its heat. Capacities below 1 would destabilize the
+explicit stencil.
+
+**The room.** Open air is the world's heat sink: empty cells relax toward the
+20-degree ambient by 1/60 of the gap per tick (smoke 1/80), and the top row is
+open sky that vents gas heat quickly. Solids and liquids only lose a slow
+1/1500 radiative trickle (at least one quantum, so integer tails still settle);
+otherwise they cool by conducting into the air at their surface. A hot block
+therefore cools from the outside in, its core glowing long after its skin, and
+cold things warm from the air around them.
+
+**Convection.** Across a vertical face between two fluids whose lower cell is
+hotter, a fraction (`CONVECT`: gases 0.4, liquids 0.08) of the lower cell's
+excess over ambient rises, and the upper cell's chill sinks. It is a single
+flux per face that both cells compute identically, so it conserves energy and
+stays lockstep-safe. It is donor-cell transport without a velocity field, so a
+cell that received buoyant heat is clamped to its neighbors' temperature range:
+air trapped under a ceiling pools up to its source's temperature, never above.
+Fires, heaters and lava send a plume up instead of a round halo, and cold air
+from a chiller sinks to the floor.
 Painted ice starts at -40 and has finite cold energy. Steam starts at 120.
 Fire consumes finite fuel while emitting at 1500; lava is deliberately a
 persistent 1100-degree reservoir so streams stay molten in air. Wet lava or the
@@ -40,8 +62,11 @@ applying a fresh material's spawn temperature.
 
 Steam retains its water mass until it condenses or reaches an open edge.
 Wood, oil and plants ignite from temperature and their remaining fuel. Burning
-wood/plants stay anchored; loose flames rise. Burning spends fuel and emits
-heat/smoke; water or sufficiently low temperature quenches it. Gunpowder is
+wood/plants stay anchored, flare at 1500 while throwing short-lived loose flames
+upward, then below 120 fuel die down to 600-degree embers that smoulder slowly
+and throw no flames. Loose flames rise. Water or sufficiently low temperature
+quenches fire: water falling onto a flame puts it out instead of swapping
+places with it, and a quenched flame flashes the water it touches to steam. Gunpowder is
 heat-sensitive, inert when wet, and injects heat/pressure when it explodes.
 
 ## Pressure
@@ -57,6 +82,14 @@ have progressively stronger rupture thresholds. Wall is indestructible. A
 rupture leaves a vent and throws a fragment into adjacent air. This local
 pressure field approximates confinement/expansion; it does not solve gas volume,
 compressible liquid flow or momentum.
+
+## Reading heat without the heat view
+
+Rendering consumes no physics state beyond reading it. Solids and liquids above
+430 degrees blend toward a black-body ramp (dull red, cherry, orange, yellow
+white) and feed the bloom and lighting passes in proportion to their glow, so a
+red-hot slab lights the room and visibly fades as it cools. Hot air shows as a
+faint ember haze and cold air as a pale frost; matter below zero frosts over.
 
 ## Lockstep and persistence
 
@@ -86,6 +119,10 @@ Open **Gallery**, choose a scene, then press **Play**:
   it. Erase part of the lid before starting to compare an open vent.
 - **Glassworks:** lava fuses a bed of sand into glass. Paint **Cool** to leave a
   stone crust over it.
+- **Campfire / Forest Fire:** flames lick upward, climb into what is above them,
+  then die down to glowing embers. Press **H** to see the hot plume.
+- **Anything hot:** paint Metal or Stone, hold **Heat** on it until it glows,
+  then watch it fade from the edges in.
 
 Paint **Heat** with **B**, **Cool** with **K**, **Heater** with **J** and
 **Chiller** with **U**. Oil, wood, plants and gunpowder respond to heating;

@@ -175,6 +175,15 @@ export function useSimulation(W: number, H: number, scale: number) {
     // lockstep — so the live one is kept and the hash hydration below skipped.
     const fresh = shouldBuildSim(session.connected, simRef.current)
     if (fresh) simRef.current = new Simulation(W, H, seedRef.current)
+    // dev-only handle for scripted browser checks (before/after scenes, frame
+    // timing). vite strips this branch from production builds.
+    if ((import.meta as ImportMeta & { env?: { DEV?: boolean } }).env?.DEV)
+      (globalThis as { powder?: unknown }).powder = {
+        get sim() {
+          return simRef.current
+        },
+        cfg: cfg.current,
+      }
 
     // hydrate from a shared "#s=..." link, if present. shared scenes start
     // paused so the viewer sees the exact saved arrangement before pressing play.

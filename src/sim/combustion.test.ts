@@ -18,7 +18,8 @@ describe('finite combustion', () => {
     expect(s.fuel[i]).toBeLessThan(FUEL[Mat.WOOD])
     expect(s.heat[i]).toBeGreaterThan(1000)
     let smoke = false
-    for (let t = 0; t < 300; t++) {
+    // flaring then smouldering embers: a wood cell burns for several seconds.
+    for (let t = 0; t < 1200; t++) {
       s.step()
       smoke ||= s.cells.includes(Mat.SMOKE)
     }

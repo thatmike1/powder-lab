@@ -140,14 +140,16 @@ describe('heat field — ice (melt & freeze)', () => {
     s.paint(21, 15, 0, Mat.FIRE)
     s.paint(19, 15, 0, Mat.FIRE)
     s.paint(20, 14, 0, Mat.FIRE)
-    expect(stepUntil(s, 300, () => s.cells[idx(20, 15)] === Mat.WATER)).toBe(true)
+    expect(stepUntil(s, 300, () => s.cells[idx(20, 15)] !== Mat.ICE)).toBe(true)
+    // the meltwater may flash to steam against the surrounding flames.
+    expect(countMat(s, Mat.WATER) + countMat(s, Mat.STEAM)).toBe(1)
   })
 
   it('freezes water once enough heat is removed, without spawning infinite cold', () => {
     const s = fresh()
     for (let x = 19; x < 21; x++) {
       s.paint(x, 28, 0, Mat.WATER)
-      s.heat[idx(x, 28)] = -100
+      s.heat[idx(x, 28)] = -70
     }
     s.step()
     expect(countMat(s, Mat.ICE)).toBe(2)
