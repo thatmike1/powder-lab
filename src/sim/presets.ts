@@ -341,7 +341,9 @@ function buildForestFire(W: number, H: number): Uint8Array {
     }
   }
   const xs = [36, 70, 104, 138, 172]
-  xs.forEach((x, i) => tree(x, i === xs.length - 1)) // the rightmost is ablaze
+  xs.forEach((x, i) => {
+    tree(x, i === xs.length - 1)
+  }) // the rightmost is ablaze
   return p.g
 }
 

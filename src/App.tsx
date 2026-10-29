@@ -115,8 +115,8 @@ function Meter({
       </div>
       <div className="bars-wrap">
         <div className={`bars${speed ? ' speed' : ''}`} aria-hidden="true">
-          {Array.from({ length: segments }, (_, k) => (
-            <i key={k} className={k < lit ? 'on' : undefined} />
+          {Array.from({ length: segments }, (_, k) => k + 1).map((segment) => (
+            <i key={segment} className={segment <= lit ? 'on' : undefined} />
           ))}
         </div>
         <input
@@ -288,7 +288,11 @@ export default function App() {
             </div>
 
             {ui.showTemp && (
-              <div className="heat-legend" aria-label="Temperature scale in sandbox degrees">
+              <div
+                className="heat-legend"
+                role="img"
+                aria-label="Temperature scale in sandbox degrees"
+              >
                 <span className="cold">−160° cold</span>
                 <span className="ambient">20° ambient</span>
                 <span className="boiling">100° boil</span>
