@@ -2,26 +2,44 @@ import {
   boilPoint,
   density,
   emitTemp,
-  freezePoint,
   FUEL,
+  freezePoint,
   GAS,
-  STRENGTH,
   ignitionPoint,
   isDissolvable,
   isMovable,
-  Mat,
   MAT_COUNT,
+  Mat,
   meltPoint,
+  ROOM_LOSS,
+  STRENGTH,
 } from './materials'
 import { DEFAULT_SEED, Rng } from './rng'
 import { encodeRLE } from './scene'
 import { decodeState, encodeState } from './state'
-import { AMBIENT, FACE, TEMP_SCALE, quantizeTemp, HEAT_COLORS, MIN_TEMP, MAX_TEMP } from './thermal'
+import {
+  AMBIENT,
+  CAP_Q,
+  degreeIndex,
+  FACE,
+  GLOW_START,
+  HAZE,
+  HEAT_COLORS,
+  INCAN_LIGHT,
+  INCAN_RGB,
+  INCAN_W,
+  MAX_TEMP,
+  MIN_TEMP,
+  quantizeTemp,
+  RISE,
+  TEMP_SCALE,
+} from './thermal'
 
 const CS = 16 // chunk size (cells per side)
 
-// Temperatures are Q4 degrees. Each face transfers 1/8 of its integer
-// conductivity-weighted gradient; four faces form a stable convex stencil.
+// Temperatures are Q4 degrees. Each face transfers at most 1/8 of its integer
+// conductivity-weighted gradient; with buoyancy and room loss the weights on a
+// cell still sum below 1, a stable explicit stencil (see CONDUCT in materials).
 const AMBIENT_Q = AMBIENT * TEMP_SCALE
 const AMBIENT_BAND_Q = 2 * TEMP_SCALE
 
@@ -29,7 +47,22 @@ const AMBIENT_BAND_Q = 2 * TEMP_SCALE
 // strong external cooling also solidifies lava without requiring contact.
 const LAVA_QUENCH_DELTA = 50
 
-// Background color (matches the canvas frame in CSS).
+// burning wood/plants below this much fuel are embers: they glow at a lower
+// heat and stop throwing flames, so a fire visibly dies down before going out.
+const EMBER_FUEL = 120
+const EMBER_TEMP = 600
+
+/** upward heat carried across a vertical face (lower hotter than upper): the
+ * lower cell's excess over ambient rises and the upper cell's deficit sinks.
+ * A pure function of the face, so both of its cells agree on the amount. */
+function buoyant(lower: number, upper: number, rise: number): number {
+  if (rise === 0) return 0
+  const excess =
+    (lower > AMBIENT_Q ? lower - AMBIENT_Q : 0) + (upper < AMBIENT_Q ? AMBIENT_Q - upper : 0)
+  return Math.trunc((excess * rise) / 8192)
+}
+
+// Background color (matches the canvas frame in CSS and HAZE in thermal.ts).
 const BG_R = 16,
   BG_G = 18,
   BG_B = 22
@@ -54,8 +87,6 @@ function blendBg(r: number, g: number, b: number, t: number): number {
     clamp(BG_B + (b - BG_B) * tt),
   )
 }
-
-const BG = rgba(BG_R, BG_G, BG_B)
 
 export class Simulation {
   readonly W: number
@@ -658,28 +689,61 @@ export class Simulation {
           for (let x = x0; x < x1; x++) {
             const i = y * W + x
             const q = Math.round(heat[i] * TEMP_SCALE)
-            const face = cells[i] * MAT_COUNT
+            const m = cells[i]
+            const face = m * MAT_COUNT
             let flow = 0
-            // Pair flux is antisymmetric: absent ambient cooling, equal-sized
-            // cells exchange the same integer heat in opposite directions.
-            if (y > 0)
-              flow += Math.trunc(
-                ((heat[i - W] * TEMP_SCALE - q) * FACE[face + cells[i - W]]) / 8192,
-              )
-            if (y < H - 1)
-              flow += Math.trunc(
-                ((heat[i + W] * TEMP_SCALE - q) * FACE[face + cells[i + W]]) / 8192,
-              )
-            if (x > 0)
-              flow += Math.trunc(
-                ((heat[i - 1] * TEMP_SCALE - q) * FACE[face + cells[i - 1]]) / 8192,
-              )
-            if (x < W - 1)
-              flow += Math.trunc(
-                ((heat[i + 1] * TEMP_SCALE - q) * FACE[face + cells[i + 1]]) / 8192,
-              )
-            let next = q + flow
-            next += Math.sign(AMBIENT_Q - next) * Math.ceil(Math.abs(AMBIENT_Q - next) / 50)
+            let carried = 0 // buoyant heat moved through this cell's vertical faces
+            let lo = q, // neighborhood range, for the buoyancy clamp below
+              hi = q
+            // Pair flux is antisymmetric: both cells of a face compute the same
+            // integer energy in opposite directions. Across a vertical fluid
+            // face whose lower cell is the hotter one, buoyancy also carries
+            // the lower cell's warmth up and the upper cell's chill down.
+            if (y > 0) {
+              const u = heat[i - W] * TEMP_SCALE,
+                k = face + cells[i - W]
+              flow += Math.trunc(((u - q) * FACE[k]) / 8192)
+              if (q > u) {
+                lo = u
+                const b = buoyant(q, u, RISE[k])
+                flow -= b
+                carried += b
+              } else hi = u
+            }
+            if (y < H - 1) {
+              const l = heat[i + W] * TEMP_SCALE,
+                k = face + cells[i + W]
+              flow += Math.trunc(((l - q) * FACE[k]) / 8192)
+              if (l > q) {
+                if (l > hi) hi = l
+                const b = buoyant(l, q, RISE[k])
+                flow += b
+                carried += b
+              } else if (l < lo) lo = l
+            }
+            if (x > 0) {
+              const t = heat[i - 1] * TEMP_SCALE
+              flow += Math.trunc(((t - q) * FACE[face + cells[i - 1]]) / 8192)
+              if (t < lo) lo = t
+              else if (t > hi) hi = t
+            }
+            if (x < W - 1) {
+              const t = heat[i + 1] * TEMP_SCALE
+              flow += Math.trunc(((t - q) * FACE[face + cells[i + 1]]) / 8192)
+              if (t < lo) lo = t
+              else if (t > hi) hi = t
+            }
+            // energy becomes temperature through the cell's heat capacity, then
+            // the cell meets the room: air relaxes fast, matter barely radiates.
+            let next = q + Math.trunc((flow * CAP_Q[m]) / 256)
+            // buoyancy is donor-cell transport without a velocity field, so a
+            // pocket that cannot pass heat on (under a ceiling, on the floor)
+            // would pile it past its sources. Keep such a cell within its
+            // neighborhood's range; the surplus spills away to the room.
+            if (carried !== 0) next = next < lo ? lo : next > hi ? hi : next
+            // the top row is open sky: gas there vents its heat quickly.
+            const loss = y === 0 && GAS[m] ? 4 : ROOM_LOSS[m]
+            next += Math.sign(AMBIENT_Q - next) * Math.ceil(Math.abs(AMBIENT_Q - next) / loss)
             if (Math.abs(next - AMBIENT_Q) > AMBIENT_BAND_Q || Math.abs(next - q) > 8)
               this.wake(x, y)
             else next = AMBIENT_Q
@@ -879,10 +943,26 @@ export class Simulation {
       return true
     }
     if (isMovable(tm) && density[m] > density[tm]) {
+      if (m === Mat.WATER && tm === Mat.FIRE) {
+        // water landing on a flame puts it out with a hiss instead of
+        // swapping places and carrying the flame up through the pool.
+        this.douse(x, y, tx, ty)
+        return true
+      }
       this.swap(x, y, tx, ty)
       return true
     }
     return false
+  }
+
+  /** water at (wx,wy) meets fire at (fx,fy): the flame dies to smoke at its
+   * temperature and the water flashes to steam, which keeps the water mass. */
+  private douse(wx: number, wy: number, fx: number, fy: number): void {
+    const f = fy * this.W + fx,
+      temperature = this.heat[f]
+    this.setCell(fx, fy, Mat.SMOKE)
+    this.heat[f] = temperature
+    this.setCell(wx, wy, Mat.STEAM)
   }
 
   /** Like tryMove, but for rising gases: swap upward through denser movables. */
@@ -1017,27 +1097,54 @@ export class Simulation {
       const temperature = this.heat[i]
       this.setCell(x, y, Mat.SMOKE)
       this.heat[i] = temperature
+      // the dying flame's heat flashes the water it touches into a hiss of
+      // steam, which keeps the water's mass and condenses later.
+      if (wet > 0) this.flashBoil(x, y)
       return
     }
-    const spent = Math.min(this.fuel[i], 1 + ((this.rng.next() * 2) | 0))
+    // solid fuel burns in place: it flares at full heat, then dies down to
+    // embers that smoulder slowly, keep glowing and radiate, but throw no flames.
+    const anchored = this.burnFrom[i] === Mat.WOOD || this.burnFrom[i] === Mat.PLANT
+    const ember = anchored && this.fuel[i] < EMBER_FUEL
+    const burn = ember ? (this.rng.next() < 0.35 ? 1 : 0) : 1 + ((this.rng.next() * 2) | 0)
+    const spent = Math.min(this.fuel[i], burn)
     this.fuel[i] -= spent
     this.addPressure(i, spent * 16)
     this.life[i] = Math.min(255, this.fuel[i]) // saturating, never wraps at zero
-    this.heat[i] = Math.max(this.heat[i], emitTemp[Mat.FIRE])
+    this.heat[i] = Math.max(this.heat[i], ember ? EMBER_TEMP : emitTemp[Mat.FIRE])
     this.wake(x, y)
 
-    // Solid fuel burns in place. A smoke plume above it lets the reaction read
-    // even before the last fuel is consumed. All stochastic visuals are cells
-    // in the seeded simulation; the renderer never advances the PRNG.
-    const anchored = this.burnFrom[i] === Mat.WOOD || this.burnFrom[i] === Mat.PLANT
-    if (anchored && this.matAt(x, y - 1) === Mat.EMPTY && this.rng.next() < 0.08) {
-      this.setCell(x, y - 1, Mat.SMOKE)
-      this.heat[i - this.W] = 180
+    // a flaring solid licks short-lived loose flames upward, with smoke above
+    // them, so the fire reads and climbs. All stochastic visuals are cells in
+    // the seeded simulation; the renderer never advances the PRNG.
+    if (anchored && this.matAt(x, y - 1) === Mat.EMPTY) {
+      const roll = this.rng.next()
+      if (!ember && roll < 0.1) {
+        this.setCell(x, y - 1, Mat.FIRE)
+        this.fuel[i - this.W] = 6 + ((this.rng.next() * 14) | 0)
+      } else if (roll > 0.94) {
+        this.setCell(x, y - 1, Mat.SMOKE)
+        this.heat[i - this.W] = 180
+      }
     }
     if (!anchored && wet === 0 && this.rng.next() < 0.5) {
       const first = this.rng.next() < 0.5 ? -1 : 1
       if (this.tryRise(x, y, x, y - 1, Mat.FIRE)) return
       this.tryRise(x, y, x + first, y - 1, Mat.FIRE)
+    }
+  }
+
+  /** turn the first water 4-neighbor (fixed order, so peers agree) to steam. */
+  private flashBoil(x: number, y: number): void {
+    for (const [dx, dy] of [
+      [0, -1],
+      [-1, 0],
+      [1, 0],
+      [0, 1],
+    ]) {
+      if (this.matAt(x + dx, y + dy) !== Mat.WATER) continue
+      this.setCell(x + dx, y + dy, Mat.STEAM)
+      return
     }
   }
 
@@ -1218,10 +1325,10 @@ export class Simulation {
   // ---- rendering ---------------------------------------------------------
 
   /**
-   * Final on-screen color for a cell. Heat enters two ways: a debug heatmap
-   * (blue->red ramp, ignores material) when `showTemp` is set, and otherwise an
-   * always-on subtle warm tint on ordinary matter (fire/lava are already
-   * saturated + animated, so they're left alone).
+   * Final on-screen color for a cell. Heat enters two ways: a heatmap (blue->red
+   * ramp, ignores material) when `showTemp` is set, and otherwise the material's
+   * own color shifted by temperature: frost when cold, a warm cast when hot and
+   * incandescence past GLOW_START. Fire/lava are already saturated + animated.
    */
   private colorOf(m: number, lf: number, ex: number, h: number): number {
     if (this.showTemp) {
@@ -1235,18 +1342,32 @@ export class Simulation {
     }
     const c = this.baseColor(m, lf, ex)
     if (m === Mat.FIRE || m === Mat.LAVA || m === Mat.LIGHTNING || m === Mat.HEATER) return c
-    return this.tint(c, h)
+    return this.tint(m, c, h)
   }
 
-  /** subtle warm shift: hotter pushes red up / blue down, colder the reverse. */
-  private tint(c: number, h: number): number {
+  /** warm cast when hot (red up, blue down), frost toward pale blue when below
+   * zero, and a black-body glow blended over solids and liquids when red hot. */
+  private tint(m: number, c: number, h: number): number {
     let d = (h - AMBIENT) * 0.06
     if (d < -14) d = -14
-    else if (d > 14) d = 14
-    const r = c & 0xff
-    const g = (c >> 8) & 0xff
-    const b = (c >> 16) & 0xff
-    return rgba(clamp(r + d), g, clamp(b - d))
+    else if (d > 22) d = 22
+    let r = (c & 0xff) + d
+    let g = (c >> 8) & 0xff
+    let b = ((c >> 16) & 0xff) - d
+    if (h < 0) {
+      const w = h < -150 ? 0.5 : -h / 300
+      r += (205 - r) * w
+      g += (228 - g) * w
+      b += (255 - b) * w
+    } else if (h >= GLOW_START && !GAS[m]) {
+      const k = degreeIndex(h),
+        w = INCAN_W[k] / 256,
+        glow = INCAN_RGB[k]
+      r += ((glow & 255) - r) * w
+      g += (((glow >> 8) & 255) - g) * w
+      b += (((glow >> 16) & 255) - b) * w
+    }
+    return rgba(clamp(r | 0), clamp(g | 0), clamp(b | 0))
   }
 
   /** Piecewise temperature colors keep ambient dark and reactions readable. */
@@ -1319,23 +1440,29 @@ export class Simulation {
   }
 
   private writeImage(): void {
-    const { W, H, cells, life, extra, heat, buf32, glow32 } = this
+    const { W, H, cells, life, extra, heat, buf32, glow32, showTemp } = this
     const n = W * H
     let count = 0
     let emissive = 0
     for (let i = 0; i < n; i++) {
       const m = cells[i]
       if (m === Mat.EMPTY) {
-        // in heatmap mode even empty space shows its temperature.
-        buf32[i] = this.showTemp ? this.heatColor(heat[i]) : BG
+        // heatmap mode shows the air's temperature; the normal view shows hot
+        // air as a faint haze and cold air as frost (ambient air stays BG).
+        buf32[i] = showTemp ? this.heatColor(heat[i]) : HAZE[degreeIndex(heat[i])]
         glow32[i] = 0
         continue
       }
       count++
-      const c = this.colorOf(m, life[i], extra[i], heat[i])
+      const h = heat[i]
+      const c = this.colorOf(m, life[i], extra[i], h)
       buf32[i] = c
       if (m === Mat.FIRE || m === Mat.LAVA || m === Mat.LIGHTNING || m === Mat.HEATER) {
         glow32[i] = c
+        emissive++
+      } else if (h >= GLOW_START && !showTemp && !GAS[m]) {
+        // red-hot matter lights its surroundings in proportion to its glow.
+        glow32[i] = INCAN_LIGHT[degreeIndex(h)]
         emissive++
       } else {
         glow32[i] = 0

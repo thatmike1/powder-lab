@@ -45,26 +45,38 @@ function stepUntil(s: Simulation, max: number, predicate: () => boolean): boolea
 describe('heat transport and ambient cooling', () => {
   it('a stone wall insulates wood from a lava pool behind it', () => {
     const s = fresh()
+    // a two-cell wall rising well above the pool: a single cell against an
+    // endless 1100-degree reservoir passes enough heat to char wood eventually,
+    // and hot air spilling over a wall's top may legitimately light it too.
+    for (let y = 1; y < 8; y++) for (let x = 12; x <= 13; x++) s.paint(x, y, 0, Mat.STONE)
+    // contain the reservoir, so the lava cannot drain away and pool under the wood.
+    for (let x = 7; x <= 14; x++) s.paint(x, 22, 0, Mat.WALL)
+    for (let y = 8; y < 22; y++) s.paint(7, y, 0, Mat.WALL)
     for (let y = 8; y < 22; y++) {
       for (let x = 8; x < 12; x++) s.paint(x, y, 0, Mat.LAVA) // reservoir
-      s.paint(12, y, 0, Mat.STONE) // 1-cell insulating wall
-      s.paint(13, y, 0, Mat.WOOD) // protected wood, one cell behind the wall
+      for (let x = 12; x <= 13; x++) s.paint(x, y, 0, Mat.STONE) // insulating wall
+      s.paint(14, y, 0, Mat.WOOD) // protected wood, behind the wall
     }
     const woodBefore = countMat(s, Mat.WOOD)
     for (let i = 0; i < 200; i++) s.step()
     expect(countMat(s, Mat.WOOD)).toBeGreaterThan(woodBefore - 2)
-    expect(s.heat[idx(13, 15)]).toBeLessThan(ignitionFloor())
+    expect(s.heat[idx(14, 15)]).toBeLessThan(ignitionFloor())
   })
 
-  it('a lone hot mass cools toward ambient within 150 frames', () => {
+  it('a hot mass holds its heat and cools from the outside in', () => {
     const s = fresh()
     for (let x = 18; x < 23; x++) for (let y = 13; y < 18; y++) s.paint(x, y, 0, Mat.STONE)
     for (let x = 18; x < 23; x++) for (let y = 13; y < 18; y++) s.heat[idx(x, y)] = 600
     for (let i = 0; i < 150; i++) s.step()
-    expect(s.heat[idx(20, 15)]).toBeLessThan(40)
+    const core = s.heat[idx(20, 15)],
+      corner = s.heat[idx(18, 13)]
+    expect(core).toBeGreaterThan(300) // stone stores heat; the room does not drain its core
+    expect(corner).toBeLessThan(core - 200) // the exposed surface cools first
+    for (let i = 0; i < 1350; i++) s.step()
+    expect(s.heat[idx(20, 15)]).toBeLessThan(40) // and it does reach the room
   })
 
-  it('a lava pool keeps its heat halo local', () => {
+  it('a lava pool sends its heat up as a plume, not sideways', () => {
     const s = fresh()
     for (let y = 8; y <= 21; y++) {
       s.paint(16, y, 0, Mat.WALL)
@@ -73,8 +85,9 @@ describe('heat transport and ambient cooling', () => {
     for (let x = 16; x <= 24; x++) s.paint(x, 21, 0, Mat.WALL) // floor
     for (let x = 17; x <= 23; x++) for (let y = 16; y <= 20; y++) s.paint(x, y, 0, Mat.LAVA)
     for (let i = 0; i < 200; i++) s.step()
-    expect(s.heat[idx(20, 7)]).toBeLessThan(50) // 9 cells above the pool: near ambient
-    expect(s.heat[idx(20, 15)]).toBeGreaterThan(100) // 1 cell above the pool: still hot
+    expect(s.heat[idx(20, 7)]).toBeGreaterThan(80) // 9 cells above the pool: the plume
+    expect(s.heat[idx(10, 15)]).toBeLessThan(30) // beside the vessel: room air
+    expect(Math.max(...s.heat)).toBeLessThanOrEqual(1100) // nothing hotter than the source
   })
 })
 

@@ -36,8 +36,9 @@ describe('latent heat and phase snapshots', () => {
     const b = new Simulation(32, 16, 999)
     expect(b.loadState(a.serializeState())).toBe(true)
     expect(b.serializeState()).toEqual(a.serializeState())
-    a.step(200)
-    b.step(200)
+    // walls insulate perfectly, so only the slow room trickle finishes the melt.
+    a.step(600)
+    b.step(600)
     expect(b.serializeState()).toEqual(a.serializeState())
     expect(a.cells[i]).toBe(Mat.WATER)
   })
