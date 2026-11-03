@@ -19,6 +19,12 @@ export const INPUT_LOG_TICKS = 600
 /** cursors are cosmetic; this is the send cadence, not a simulation rate */
 export const CURSOR_INTERVAL_MS = 100
 
+/** largest stroke batch emitted by the client */
+export const MAX_POINTS = 512
+
+/** brush sizes offered by the toolbar and keyboard */
+const MAX_RADIUS = 40
+
 export type PeerId = string
 
 export type PeerInfo = { id: PeerId; name: string }
@@ -115,7 +121,13 @@ export type ServerMessage =
 
 /** a flat x0,y0,x1,y1,... point list, or null if it is not one */
 function parsePoints(raw: unknown): number[] | null {
-  if (!Array.isArray(raw) || raw.length === 0 || raw.length % 2 !== 0) return null
+  if (
+    !Array.isArray(raw) ||
+    raw.length === 0 ||
+    raw.length > MAX_POINTS * 2 ||
+    raw.length % 2 !== 0
+  )
+    return null
   if (!raw.every(num)) return null
   return raw as number[]
 }
@@ -136,7 +148,7 @@ function parseSegments<T>(
   for (const entry of raw) {
     if (!isRecord(entry)) return null
     if (!num(entry.n) || !Number.isInteger(entry.n) || entry.n < 1) return null
-    if (!num(entry.r)) return null
+    if (!isRadius(entry.r)) return null
     const tail = rest(entry)
     if (tail === null) return null
     total += entry.n
@@ -147,6 +159,10 @@ function parseSegments<T>(
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value)
+}
+
+function isRadius(value: unknown): value is number {
+  return num(value) && Number.isInteger(value) && value >= 0 && value <= MAX_RADIUS
 }
 
 function num(value: unknown): value is number {
@@ -164,7 +180,7 @@ export function parseInputEvent(raw: unknown): InputEvent | null {
     case 'paint': {
       const pts = parsePoints(raw.pts)
       if (pts === null) return null
-      if (!num(raw.r) || !num(raw.mat)) return null
+      if (!isRadius(raw.r) || !num(raw.mat)) return null
       if (raw.segs === undefined) return { type: 'paint', pts, r: raw.r, mat: raw.mat }
       const segs = parseSegments(raw.segs, pts.length / 2, (entry) =>
         num(entry.mat) ? { mat: entry.mat } : null,
@@ -175,7 +191,7 @@ export function parseInputEvent(raw: unknown): InputEvent | null {
     case 'magnet': {
       const pts = parsePoints(raw.pts)
       if (pts === null) return null
-      if (!num(raw.r) || typeof raw.attract !== 'boolean') return null
+      if (!isRadius(raw.r) || typeof raw.attract !== 'boolean') return null
       if (raw.segs === undefined) return { type: 'magnet', pts, r: raw.r, attract: raw.attract }
       const segs = parseSegments(raw.segs, pts.length / 2, (entry) =>
         typeof entry.attract === 'boolean' ? { attract: entry.attract } : null,
