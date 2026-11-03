@@ -1,10 +1,9 @@
-import type { MagnetEvent, PaintEvent } from './protocol'
+import { MAX_POINTS, type MagnetEvent, type PaintEvent } from './protocol'
+
+export { MAX_POINTS } from './protocol'
 
 /** flush cadence: 20 events per second rather than one per rendered frame */
 export const FLUSH_MS = 50
-
-/** hard cap on points in one event, so a long drag cannot grow an unbounded frame */
-export const MAX_POINTS = 512
 
 export interface PointBatcherOptions<E> {
   /** put the event on the wire; false means the socket is gone */
