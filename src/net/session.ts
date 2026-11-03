@@ -89,6 +89,7 @@ export class NetSession {
   private readonly scheduler = new InputScheduler()
 
   private transport: Transport | null = null
+  private connectionGeneration = 0
   private hooks: SessionHooks | null = null
   private pendingJoin: { room?: string; name: string } | null = null
 
@@ -179,6 +180,10 @@ export class NetSession {
 
   private open(room: string | undefined, name?: string): void {
     if (this.statusValue === 'connecting' || this.statusValue === 'connected') return
+    const previous = this.transport
+    this.transport = null
+    const generation = ++this.connectionGeneration
+    previous?.close()
     this.errorValue = null
     this.pendingJoin = { room, name: name ?? 'anon' }
     this.setStatus('connecting')
@@ -187,18 +192,26 @@ export class NetSession {
       // a transport that is already open calls this before `connect` returns,
       // so the join has to wait for the field assignment below.
       onOpen: () => {
+        if (generation !== this.connectionGeneration) return
         if (this.transport === null) openedEarly = true
         else this.handleOpen()
       },
-      onMessage: (data) => this.handleMessage(data),
-      onClose: (reason) => this.handleClose(reason),
-      onError: (message) => this.handleError(message),
+      onMessage: (data) => {
+        if (generation === this.connectionGeneration) this.handleMessage(data)
+      },
+      onClose: (reason) => {
+        if (generation === this.connectionGeneration) this.handleClose(reason)
+      },
+      onError: (message) => {
+        if (generation === this.connectionGeneration) this.handleError(message)
+      },
     })
     if (openedEarly) this.handleOpen()
   }
 
   /** leave the room and fall back to a purely local simulation */
   leave(): void {
+    this.connectionGeneration++
     const transport = this.transport
     this.transport = null
     transport?.close()
@@ -447,6 +460,7 @@ export class NetSession {
   }
 
   private rejectState(): void {
+    this.connectionGeneration++
     const transport = this.transport
     this.transport = null
     transport?.close()
