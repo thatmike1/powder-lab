@@ -365,3 +365,56 @@ describe('NetSession', () => {
     expect(a.session.advance(100)).toBe(0)
   })
 })
+
+describe('transport replacement', () => {
+  it('ignores delayed callbacks from a room left before reconnecting', () => {
+    const connections: TransportHandlers[] = []
+    const sent: string[][] = []
+    const session = new NetSession({
+      url: 'ws://fake',
+      now: () => 100_000,
+      connect: (_url, handlers) => {
+        const index = connections.push(handlers) - 1
+        sent[index] = []
+        return { send: (data) => sent[index].push(data), close: () => {}, open: true }
+      },
+    })
+    session.createRoom()
+    connections[0].onOpen()
+    session.leave()
+    session.joinRoom('NEXT')
+    connections[1].onOpen()
+    connections[1].onMessage(
+      JSON.stringify({
+        type: 'joined',
+        room: 'NEXT',
+        you: 'new-peer',
+        seed: SEED,
+        tick: 0,
+        serverTime: 100_000,
+        state: null,
+        peers: [],
+      }),
+    )
+    expect(session.connected).toBe(true)
+
+    connections[0].onClose('connection closed')
+    connections[0].onError('old failure')
+    connections[0].onMessage(
+      JSON.stringify({
+        type: 'joined',
+        room: 'OLD',
+        you: 'old-peer',
+        seed: SEED,
+        tick: 0,
+        serverTime: 100_000,
+        state: null,
+        peers: [],
+      }),
+    )
+    expect(session.status).toBe('connected')
+    expect(session.room).toBe('NEXT')
+    expect(session.you).toBe('new-peer')
+    expect(session.error).toBeNull()
+  })
+})
