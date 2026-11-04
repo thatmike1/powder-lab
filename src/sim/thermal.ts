@@ -108,11 +108,7 @@ ramp(
     // lights the room, a yellow one floods it.
     const l = w * w
     INCAN_LIGHT[i] =
-      (0xff000000 |
-        (Math.round(b * l) << 16) |
-        (Math.round(g * l) << 8) |
-        Math.round(r * l)) >>>
-      0
+      (0xff000000 | (Math.round(b * l) << 16) | (Math.round(g * l) << 8) | Math.round(r * l)) >>> 0
   },
 )
 
